@@ -392,9 +392,9 @@ async function initAuth() {
       updateUI(); loadShop(); loadTransactions();
       document.getElementById('loadingScreen').classList.add('hidden');
     } else {
-      showToast(d.error || 'Auth failed', 'error');
+      showToast(d.error || 'Auth failed', 'error'); document.getElementById('loadingScreen').classList.add('hidden');
     }
-  } catch (e) { showToast('Network error', 'error'); console.error(e); }
+  } catch (e) { showToast('Network error', 'error'); console.error(e); document.getElementById('loadingScreen').classList.add('hidden'); }
 }
 
 function updateUI() {
