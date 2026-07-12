@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>TRX PRO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+<style>
+:root {
+  --bg-deep: #07070d; --bg-card: #0f111a;
+  --neon-cyan: #3df2d4; --neon-purple: #a86bff;
+  --neon-pink: #ff5f7e; --neon-yellow: #f6d35e;
+  --glass-border: rgba(255,255,255,0.08);
+  --text-primary: #e8e6f2; --text-muted: rgba(255,255,255,0.5);
+  --success: #22c55e; --danger: #ef4444;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body {
+  height:100%;
+  background: radial-gradient(ellipse at 50% 0%, #1a1436 0%, var(--bg-deep) 50%, #000 100%);
+  font-family: 'Manrope', sans-serif; color: var(--text-primary); overflow: hidden;
+}
+.app { max-width: 430px; margin: 0 auto; height: 100vh; display: flex; flex-direction: column; position: relative; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px 10px; z-index: 10; }
+.brand {
+  font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 18px; letter-spacing: 2px;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.balance-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px); padding: 6px 12px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; font-family: 'Orbitron', sans-serif;
+}
+.balance-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--neon-cyan); box-shadow: 0 0 8px var(--neon-cyan); animation: pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.content { flex: 1; overflow-y: auto; padding: 0 16px 80px; scrollbar-width: none; }
+.content::-webkit-scrollbar { display: none; }
+.miner-tap-area { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 0; position: relative; }
+.miner-orb {
+  width: 180px; height: 180px; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(61,242,212,0.3), transparent 60%), radial-gradient(circle at 70% 70%, rgba(168,107,255,0.2), transparent 60%), linear-gradient(135deg, #1a1436, #0f111a);
+  border: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: transform 0.1s, box-shadow 0.3s; position: relative; overflow: hidden;
+}
+.miner-orb::before { content: ''; position: absolute; inset: -2px; border-radius: 50%; background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple)); opacity: 0.3; filter: blur(20px); z-index: -1; }
+.miner-orb:active { transform: scale(0.95); }
+.miner-orb.tapped { transform: scale(1.05); box-shadow: 0 0 40px rgba(61,242,212,0.4), 0 0 80px rgba(168,107,255,0.2); }
+.tap-icon { font-size: 48px; filter: drop-shadow(0 0 10px rgba(61,242,212,0.5)); }
+.tap-reward {
+  position: absolute; font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700;
+  color: var(--neon-cyan); pointer-events: none; animation: float-up 1s ease-out forwards;
+}
+@keyframes float-up { 0%{opacity:1;transform:translateY(0)scale(1)} 100%{opacity:0;transform:translateY(-60px)scale(1.3)} }
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
+.stat-card {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+  border-radius: 14px; padding: 14px 8px; text-align: center; backdrop-filter: blur(8px);
+}
+.stat-value { font-family: 'Orbitron', sans-serif; font-size: 18px; font-weight: 700; color: var(--neon-cyan); }
+.stat-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.energy-bar { margin-top: 16px; background: rgba(255,255,255,0.05); border-radius: 10px; height: 8px; overflow: hidden; border: 1px solid var(--glass-border); }
+.energy-fill { height: 100%; background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple)); border-radius: 10px; transition: width 0.3s; box-shadow: 0 0 10px rgba(61,242,212,0.3); }
+.energy-text { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.level-bar { margin-top: 12px; background: rgba(255,255,255,0.05); border-radius: 10px; height: 6px; overflow: hidden; }
+.level-fill { height: 100%; background: linear-gradient(90deg, var(--neon-yellow), var(--neon-pink)); border-radius: 10px; transition: width 0.3s; }
+.level-text { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.shop-filters { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
+.shop-filters::-webkit-scrollbar { display: none; }
+.shop-chip {
+  padding: 7px 14px; border-radius: 20px; border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 12px;
+  font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.2s;
+}
+.shop-chip.active { background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple)); color: var(--bg-deep); border-color: transparent; }
+.item-card {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+  border-radius: 16px; padding: 16px; margin-bottom: 12px; display: flex; gap: 14px;
+  align-items: center; transition: transform 0.2s, border-color 0.2s;
+}
+.item-card:active { transform: scale(0.98); }
+.item-icon { width: 60px; height: 60px; border-radius: 14px; background: linear-gradient(135deg, rgba(61,242,212,0.1), rgba(168,107,255,0.1)); border: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0; }
+.item-info { flex: 1; }
+.item-name { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+.item-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.item-rarity { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.rarity-Common { background: rgba(255,255,255,0.1); color: #fff; }
+.rarity-Rare { background: rgba(59,130,246,0.2); color: #60a5fa; }
+.rarity-Epic { background: rgba(168,107,255,0.2); color: #c084fc; }
+.rarity-Legendary { background: linear-gradient(90deg, rgba(245,158,11,0.2), rgba(239,68,68,0.2)); color: #fbbf24; }
+.item-price { text-align: right; display: flex; flex-direction: column; gap: 4px; }
+.price-trx { font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700; color: var(--neon-cyan); }
+.price-ton { font-family: 'Orbitron', sans-serif; font-size: 12px; color: var(--neon-purple); }
+.buy-btn { background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple)); color: var(--bg-deep); border: none; padding: 8px 16px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: 'Orbitron', sans-serif; }
+.crash-stage { position: relative; height: 280px; background: linear-gradient(180deg, rgba(61,242,212,0.05), transparent 30%), linear-gradient(160deg, #120f24 0%, #08070f 70%); border-radius: 20px; border: 1px solid var(--glass-border); overflow: hidden; margin-bottom: 16px; }
+.crash-canvas { width: 100%; height: 100%; }
+.crash-multiplier { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+.mult-num { font-family: 'Orbitron', sans-serif; font-size: 48px; font-weight: 900; color: var(--neon-cyan); text-shadow: 0 0 20px rgba(61,242,212,0.5); }
+.mult-label { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
+.crash-history { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; }
+.history-chip { font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); }
+.history-win { color: var(--neon-cyan); }
+.history-loss { color: var(--neon-pink); }
+.fairness-pill { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; gap: 5px; background: rgba(0,0,0,0.35); border: 1px solid var(--glass-border); backdrop-filter: blur(8px); padding: 5px 10px; border-radius: 999px; font-size: 10px; color: var(--text-muted); }
+.crash-controls { background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 20px; padding: 16px; }
+.currency-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+.currency-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Orbitron', sans-serif; transition: all 0.2s; }
+.currency-btn.active { background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple)); color: var(--bg-deep); border-color: transparent; }
+.bet-input-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.bet-input { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 8px; }
+.bet-input input { background: none; border: none; outline: none; color: #fff; font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 15px; width: 100%; }
+.bet-input span { font-size: 11px; color: var(--text-muted); font-weight: 700; }
+.quick-btn { background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-muted); font-size: 11px; font-weight: 700; padding: 10px 12px; border-radius: 10px; cursor: pointer; }
+.action-btn { width: 100%; border: none; border-radius: 14px; padding: 16px; font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 14px; letter-spacing: 1px; cursor: pointer; transition: all 0.15s; }
+.action-btn:active { transform: scale(0.98); }
+.btn-bet { background: linear-gradient(90deg, var(--neon-cyan), #2bd6c9); color: var(--bg-deep); box-shadow: 0 0 22px rgba(61,242,212,0.35); }
+.btn-cashout { background: linear-gradient(90deg, var(--neon-yellow), var(--neon-pink)); color: var(--bg-deep); box-shadow: 0 0 26px rgba(255,140,60,0.5); }
+.btn-disabled { background: rgba(255,255,255,0.06); color: var(--text-muted); cursor: default; }
+.referral-code-box { background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 16px; padding: 16px; text-align: center; margin-bottom: 16px; }
+.ref-code { font-family: 'Orbitron', sans-serif; font-size: 20px; font-weight: 700; color: var(--neon-cyan); letter-spacing: 2px; margin-bottom: 12px; }
+.ref-buttons { display: flex; gap: 10px; }
+.ref-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05); color: var(--text-primary); font-size: 13px; font-weight: 700; cursor: pointer; }
+.tree-visual { background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 16px; }
+.tree-node { width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple)); margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.tree-branches { display: flex; justify-content: center; gap: 40px; margin-top: 12px; }
+.tree-leg { text-align: center; }
+.leg-bar { width: 80px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin: 8px auto; overflow: hidden; }
+.leg-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.leg-left .leg-fill { background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple)); }
+.leg-right .leg-fill { background: linear-gradient(90deg, var(--neon-pink), var(--neon-yellow)); }
+.profile-header { display: flex; align-items: center; gap: 16px; padding: 20px 0; }
+.profile-avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple)); display: flex; align-items: center; justify-content: center; font-size: 28px; border: 2px solid var(--glass-border); }
+.profile-info h2 { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.profile-info p { font-size: 13px; color: var(--text-muted); }
+.wallet-card { background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+.wallet-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.wallet-title { font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.wallet-amount { font-family: 'Orbitron', sans-serif; font-size: 24px; font-weight: 700; color: var(--neon-cyan); }
+.wallet-actions { display: flex; gap: 10px; }
+.wallet-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05); color: var(--text-primary); font-size: 12px; font-weight: 700; cursor: pointer; }
+.tx-list { margin-top: 16px; }
+.tx-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--glass-border); }
+.tx-type { font-size: 13px; font-weight: 600; }
+.tx-amount { font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700; }
+.tx-amount.positive { color: var(--neon-cyan); }
+.tx-amount.negative { color: var(--neon-pink); }
+.tx-time { font-size: 11px; color: var(--text-muted); }
+.tabbar { display: flex; justify-content: space-around; padding: 10px 8px 20px; border-top: 1px solid var(--glass-border); background: rgba(7,7,13,0.95); backdrop-filter: blur(20px); position: sticky; bottom: 0; z-index: 100; }
+.tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); cursor: pointer; transition: color 0.2s; padding: 4px 8px; }
+.tab-item.active { color: var(--neon-cyan); }
+.tab-icon { font-size: 20px; }
+.toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(100px); background: rgba(15,17,26,0.95); border: 1px solid var(--glass-border); color: var(--text-primary); padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 600; z-index: 200; transition: transform 0.3s; white-space: nowrap; backdrop-filter: blur(12px); }
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.success { border-color: var(--neon-cyan); color: var(--neon-cyan); }
+.toast.error { border-color: var(--neon-pink); color: var(--neon-pink); }
+.loading-screen { position: fixed; inset: 0; background: var(--bg-deep); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; transition: opacity 0.5s; }
+.loading-screen.hidden { opacity: 0; pointer-events: none; }
+.loader { width: 50px; height: 50px; border: 3px solid rgba(61,242,212,0.2); border-top-color: var(--neon-cyan); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { margin-top: 16px; font-family: 'Orbitron', sans-serif; font-size: 14px; color: var(--neon-cyan); letter-spacing: 2px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="loading-screen" id="loadingScreen">
+  <div class="loader"></div>
+  <div class="loading-text">TRX PRO</div>
+</div>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">TRX PRO</div>
+    <div class="balance-chip">
+      <span class="dot"></span>
+      <span id="topBalance">0</span> TRX
+    </div>
+  </div>
+
+  <div class="content" id="content">
+    <!-- TAB: Home / Miner -->
+    <div id="tab-home" class="tab-content">
+      <div class="miner-tap-area">
+        <div class="miner-orb" id="minerOrb" onclick="handleTap()">
+          <span class="tap-icon">⛏️</span>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statBalance">0</div>
+          <div class="stat-label">TRX</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statPower">1.0</div>
+          <div class="stat-label">Power</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statLevel">1</div>
+          <div class="stat-label">Level</div>
+        </div>
+      </div>
+      <div class="energy-bar">
+        <div class="energy-fill" id="energyFill" style="width:100%"></div>
+      </div>
+      <div class="energy-text" id="energyText">100 / 100 Energy</div>
+      <div class="level-bar">
+        <div class="level-fill" id="levelFill" style="width:0%"></div>
+      </div>
+      <div class="level-text">
+        <span>XP</span>
+        <span id="xpText">0 / 150</span>
+      </div>
+    </div>
+
+    <!-- TAB: Shop -->
+    <div id="tab-shop" class="tab-content hidden">
+      <div class="shop-filters">
+        <div class="shop-chip active" onclick="filterShop('all')">All</div>
+        <div class="shop-chip" onclick="filterShop('boost')">Boosters</div>
+        <div class="shop-chip" onclick="filterShop('auto')">Auto</div>
+        <div class="shop-chip" onclick="filterShop('energy')">Energy</div>
+        <div class="shop-chip" onclick="filterShop('ultra')">Ultra</div>
+      </div>
+      <div id="shopItems"></div>
+    </div>
+
+    <!-- TAB: Crash -->
+    <div id="tab-crash" class="tab-content hidden">
+      <div class="crash-stage">
+        <canvas id="crashCanvas" class="crash-canvas"></canvas>
+        <div class="crash-history" id="crashHistory">
+          <div class="history-chip history-win">1.42x</div>
+          <div class="history-chip history-loss">1.05x</div>
+          <div class="history-chip history-win">2.80x</div>
+        </div>
+        <div class="fairness-pill">🔒 Provably Fair</div>
+        <div class="crash-multiplier">
+          <div class="mult-num" id="multNum">1.00x</div>
+          <div class="mult-label" id="multLabel">WAITING</div>
+        </div>
+      </div>
+      <div class="crash-controls">
+        <div class="currency-toggle">
+          <button class="currency-btn active" id="btnTRX" onclick="setCurrency('TRX')">TRX</button>
+          <button class="currency-btn" id="btnTON" onclick="setCurrency('TON')">TON</button>
+        </div>
+        <div class="bet-input-row">
+          <div class="bet-input">
+            <span>BET</span>
+            <input type="text" id="betAmount" value="100" inputmode="numeric">
+          </div>
+          <button class="quick-btn" onclick="halveBet()">½</button>
+          <button class="quick-btn" onclick="doubleBet()">2x</button>
+        </div>
+        <button class="action-btn btn-bet" id="crashActionBtn" onclick="handleCrashAction()">PLACE BET</button>
+      </div>
+    </div>
+
+    <!-- TAB: Referral -->
+    <div id="tab-referral" class="tab-content hidden">
+      <div class="referral-code-box">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Your Referral Code</div>
+        <div class="ref-code" id="refCode">TRX_------</div>
+        <div class="ref-buttons">
+          <button class="ref-btn" onclick="copyRefCode()">📋 Copy</button>
+          <button class="ref-btn" onclick="shareRef()">📤 Share</button>
+        </div>
+      </div>
+      <div class="tree-visual">
+        <div class="tree-node">👤</div>
+        <div style="font-size:14px;font-weight:700;">You</div>
+        <div class="tree-branches">
+          <div class="tree-leg leg-left">
+            <div style="font-size:12px;color:var(--neon-cyan);font-weight:700;">LEFT</div>
+            <div class="leg-bar"><div class="leg-fill" id="leftFill" style="width:0%"></div></div>
+            <div style="font-size:11px;color:var(--text-muted);" id="leftVol">0 TRX</div>
+          </div>
+          <div class="tree-leg leg-right">
+            <div style="font-size:12px;color:var(--neon-pink);font-weight:700;">RIGHT</div>
+            <div class="leg-bar"><div class="leg-fill" id="rightFill" style="width:0%"></div></div>
+            <div style="font-size:11px;color:var(--text-muted);" id="rightVol">0 TRX</div>
+          </div>
+        </div>
+      </div>
+      <div class="wallet-card">
+        <div class="wallet-header">
+          <span class="wallet-title">Network Stats</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
+          <span style="font-size:13px;color:var(--text-muted);">Left Volume</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-cyan);" id="netLeft">0 TRX</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
+          <span style="font-size:13px;color:var(--text-muted);">Right Volume</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-pink);" id="netRight">0 TRX</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;">
+          <span style="font-size:13px;color:var(--text-muted);">Next Bonus</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-yellow);">400 TRX</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Profile -->
+    <div id="tab-profile" class="tab-content hidden">
+      <div class="profile-header">
+        <div class="profile-avatar" id="profileAvatar">👤</div>
+        <div class="profile-info">
+          <h2 id="profileName">User</h2>
+          <p id="profileLevel">Level 1 ⭐</p>
+        </div>
+      </div>
+      <div class="wallet-card">
+        <div class="wallet-header">
+          <span class="wallet-title">TRX Balance</span>
+        </div>
+        <div class="wallet-amount" id="walletTRX">0 TRX</div>
+        <div class="wallet-actions">
+          <button class="wallet-btn" onclick="depositTRX()">Deposit</button>
+          <button class="wallet-btn" onclick="withdrawTRX()">Withdraw</button>
+        </div>
+      </div>
+      <div class="wallet-card">
+        <div class="wallet-header">
+          <span class="wallet-title">TON Wallet</span>
+        </div>
+        <div id="tonConnectContainer" style="display:flex;justify-content:center;padding:10px 0;">
+          <div id="ton-connect" style="transform:scale(0.9);"></div>
+        </div>
+      </div>
+      <div class="tx-list" id="txList">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">Recent Transactions</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="tabbar">
+    <div class="tab-item active" onclick="switchTab('home')">
+      <span class="tab-icon">⛏️</span>
+      <span>Mine</span>
+    </div>
+    <div class="tab-item" onclick="switchTab('shop')">
+      <span class="tab-icon">🛒</span>
+      <span>Shop</span>
+    </div>
+    <div class="tab-item" onclick="switchTab('crash')">
+      <span class="tab-icon">🎰</span>
+      <span>Crash</span>
+    </div>
+    <div class="tab-item" onclick="switchTab('referral')">
+      <span class="tab-icon">🌳</span>
+      <span>Referral</span>
+    </div>
+    <div class="tab-item" onclick="switchTab('profile')">
+      <span class="tab-icon">👤</span>
+      <span>Profile</span>
+    </div>
+  </div>
+</div>
+<script>
+const API_BASE = '';
+let tg = null, userId = null, username = '', firstName = 'User', photoUrl = '', initDataRaw = '';
+let currentTab = 'home', userData = {}, shopItems = [], crashCurrency = 'TRX', crashState = 'waiting';
+
+if (window.Telegram && window.Telegram.WebApp) {
+  tg = window.Telegram.WebApp;
+  tg.ready(); tg.expand();
+  tg.setHeaderColor('#07070d'); tg.setBackgroundColor('#07070d');
+  initDataRaw = tg.initData || '';
+  const user = tg.initDataUnsafe.user || {};
+  userId = String(user.id || 'demo_user');
+  username = user.username || '';
+  firstName = user.first_name || 'User';
+  photoUrl = user.photo_url || '';
+} else {
+  userId = 'demo_user';
+}
+
+async function initAuth() {
+  try {
+    const r = await fetch(API_BASE + '/api/auth/init', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ init_data: initDataRaw })
+    });
+    const d = await r.json();
+    if (d.success) {
+      userData = d.user;
+      updateUI(); loadShop(); loadTransactions();
+      document.getElementById('loadingScreen').classList.add('hidden');
+    } else {
+      showToast(d.error || 'Auth failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); console.error(e); }
+}
+
+function updateUI() {
+  document.getElementById('topBalance').textContent = Math.floor(userData.balance_trx || 0).toLocaleString();
+  document.getElementById('statBalance').textContent = Math.floor(userData.balance_trx || 0).toLocaleString();
+  document.getElementById('statPower').textContent = (userData.mining_power || 1.0).toFixed(1);
+  document.getElementById('statLevel').textContent = userData.level || 1;
+  document.getElementById('energyText').textContent = `${userData.energy || 0} / ${userData.energy_max || 100} Energy`;
+  document.getElementById('energyFill').style.width = ((userData.energy || 0) / (userData.energy_max || 100) * 100) + '%';
+  document.getElementById('xpText').textContent = `${userData.xp || 0} / ${userData.xp_next || 150}`;
+  document.getElementById('levelFill').style.width = ((userData.xp || 0) / (userData.xp_next || 150) * 100) + '%';
+  document.getElementById('refCode').textContent = userData.referral_code || 'TRX_------';
+  document.getElementById('profileName').textContent = firstName;
+  document.getElementById('profileLevel').textContent = `Level ${userData.level || 1} ⭐`;
+  document.getElementById('walletTRX').textContent = Math.floor(userData.balance_trx || 0).toLocaleString() + ' TRX';
+  if (photoUrl) document.getElementById('profileAvatar').innerHTML = `<img src="${photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('tab-' + tab).classList.remove('hidden');
+  document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+async function handleTap() {
+  const orb = document.getElementById('minerOrb');
+  orb.classList.add('tapped');
+  setTimeout(() => orb.classList.remove('tapped'), 200);
+  const reward = document.createElement('div');
+  reward.className = 'tap-reward';
+  reward.textContent = '+' + ((userData.mining_power || 1) * 0.1).toFixed(2) + ' TRX';
+  reward.style.left = '50%'; reward.style.top = '40%';
+  orb.appendChild(reward);
+  setTimeout(() => reward.remove(), 1000);
+  try {
+    const r = await fetch(API_BASE + '/api/tap', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, init_data: initDataRaw })
+    });
+    const d = await r.json();
+    if (d.success) {
+      userData = { ...userData, ...d };
+      updateUI();
+      if (d.level > (userData.level || 1)) showToast(`Level Up! Now Level ${d.level}`, 'success');
+    } else { showToast(d.error || 'Tap failed', 'error'); }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function loadShop() {
+  try {
+    const r = await fetch(API_BASE + '/api/shop/items');
+    const d = await r.json();
+    if (d.success) { shopItems = d.items; renderShop('all'); }
+  } catch (e) { console.error('Load shop failed', e); }
+}
+
+function filterShop(category) {
+  document.querySelectorAll('.shop-chip').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  renderShop(category);
+}
+
+function renderShop(filter) {
+  const container = document.getElementById('shopItems');
+  let items = shopItems;
+  if (filter !== 'all') items = shopItems.filter(i => i.effect_type.includes(filter) || i.rarity.toLowerCase() === filter);
+  container.innerHTML = items.map(item => {
+    const emoji = { 'auto_mine': '⚡', 'energy': '🔋', 'mining_speed': '🚀', 'multiplier': '💎' }[item.effect_type] || '🎁';
+    return `<div class="item-card" onclick="buyItem('${item.item_key}')">
+      <div class="item-icon">${emoji}</div>
+      <div class="item-info">
+        <div class="item-name">${item.name}</div>
+        <div class="item-desc">${item.description}</div>
+        <span class="item-rarity rarity-${item.rarity}">${item.rarity}</span>
+      </div>
+      <div class="item-price">
+        ${item.price_trx ? `<div class="price-trx">${item.price_trx} TRX</div>` : ''}
+        ${item.price_ton ? `<div class="price-ton">${item.price_ton} TON</div>` : ''}
+        <button class="buy-btn">BUY</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function buyItem(itemKey) {
+  try {
+    const r = await fetch(API_BASE + '/api/shop/buy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, item_key: itemKey, currency: 'TRX' })
+    });
+    const d = await r.json();
+    if (d.success) { showToast(d.message, 'success'); userData.balance_trx = d.balance_trx; updateUI(); }
+    else { showToast(d.error || 'Purchase failed', 'error'); }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+function setCurrency(curr) {
+  crashCurrency = curr;
+  document.getElementById('btnTRX').classList.toggle('active', curr === 'TRX');
+  document.getElementById('btnTON').classList.toggle('active', curr === 'TON');
+}
+
+function halveBet() {
+  const el = document.getElementById('betAmount');
+  el.value = Math.max(10, Math.floor(parseInt(el.value) / 2));
+}
+
+function doubleBet() {
+  const el = document.getElementById('betAmount');
+  el.value = Math.floor(parseInt(el.value) * 2);
+}
+
+function handleCrashAction() {
+  if (crashState === 'waiting') showToast('Crash game coming in Phase 3!', 'success');
+}
+
+function copyRefCode() {
+  const code = document.getElementById('refCode').textContent;
+  navigator.clipboard.writeText(code).then(() => showToast('Code copied!', 'success'));
+}
+
+function shareRef() {
+  const code = userData.referral_code || '';
+  const text = `Join TRX PRO and start mining! Use my code: ${code}`;
+  if (tg) tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(config.WEBAPP_URL)}&text=${encodeURIComponent(text)}`);
+}
+
+function depositTRX() { showToast('Deposit: Send TRX to project wallet (coming soon)', 'success'); }
+function withdrawTRX() { showToast('Withdrawal: Minimum 100 TRX (coming soon)', 'success'); }
+
+async function loadTransactions() {
+  try {
+    const r = await fetch(API_BASE + '/api/user/' + userId);
+    const d = await r.json();
+  } catch (e) {}
+}
+
+const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+  manifestUrl: window.location.origin + '/tonconnect-manifest.json',
+  buttonRootId: 'ton-connect'
+});
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast ' + type; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+initAuth();
+</script>
+</body>
+</html>
