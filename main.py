@@ -246,6 +246,7 @@ async def run_bot():
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
+    init_db()
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     asyncio.run(run_bot())
