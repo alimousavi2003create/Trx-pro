@@ -14,6 +14,7 @@ import config
 from database import init_db, get_db_cursor
 from auth import verify_init_data
 from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions
+from crash_engine import start_crash_engine, get_public_state
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -215,6 +216,96 @@ def api_seed_shop():
             """, item)
     return jsonify({"success": True, "message": "Shop items seeded"})
 
+@app.route("/api/crash/state")
+def api_crash_state():
+    return jsonify({"success": True, **get_public_state()})
+
+@app.route("/api/crash/bet", methods=["POST"])
+def api_crash_bet():
+    data = request.json
+    user_id = str(data.get("user_id"))
+    init_data_raw = data.get("init_data", "")
+    currency = data.get("currency", "TRX")
+    amount = data.get("amount")
+    try:
+        verify_init_data(init_data_raw)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 403
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid amount"}), 400
+    if amount <= 0:
+        return jsonify({"success": False, "error": "Invalid amount"}), 400
+
+    state = get_public_state()
+    if state["status"] != "waiting":
+        return jsonify({"success": False, "error": "Betting closed for this round"}), 400
+
+    user = get_user(user_id)
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+
+    balance_col = "balance_trx" if currency == "TRX" else "balance_ton"
+    if user[balance_col] < amount:
+        return jsonify({"success": False, "error": "Insufficient balance"}), 400
+
+    with get_db_cursor() as c:
+        c.execute("SELECT id FROM crash_bets WHERE round_id = %s AND user_id = %s AND status = 'pending'",
+                   (state["round_id"], user_id))
+        if c.fetchone():
+            return jsonify({"success": False, "error": "Bet already placed for this round"}), 400
+        c.execute(f"UPDATE users SET {balance_col} = {balance_col} - %s WHERE user_id = %s",
+                   (amount, user_id))
+        c.execute("""
+            INSERT INTO crash_bets (round_id, user_id, currency, amount, status)
+            VALUES (%s, %s, %s, %s, 'pending')
+        """, (state["round_id"], user_id, currency, amount))
+
+    return jsonify({"success": True, "message": "Bet placed"})
+
+@app.route("/api/crash/cashout", methods=["POST"])
+def api_crash_cashout():
+    data = request.json
+    user_id = str(data.get("user_id"))
+    init_data_raw = data.get("init_data", "")
+    try:
+        verify_init_data(init_data_raw)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 403
+
+    state = get_public_state()
+    if state["status"] != "running":
+        return jsonify({"success": False, "error": "Round not running"}), 400
+
+    with get_db_cursor() as c:
+        c.execute("""
+            SELECT * FROM crash_bets WHERE round_id = %s AND user_id = %s AND status = 'pending'
+        """, (state["round_id"], user_id))
+        bet = c.fetchone()
+        if not bet:
+            return jsonify({"success": False, "error": "No active bet"}), 400
+
+        multiplier = state["multiplier"]
+        payout = round(bet["amount"] * multiplier, 4)
+        profit = round(payout - bet["amount"], 4)
+        fee = round(profit * (config.PROJECT_FEE_PERCENT / 100), 4) if profit > 0 else 0
+        net_payout = round(payout - fee, 4)
+        balance_col = "balance_trx" if bet["currency"] == "TRX" else "balance_ton"
+
+        c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
+                   (net_payout, user_id))
+        c.execute("""
+            UPDATE crash_bets SET status = 'cashed_out', cashout_multiplier = %s, profit = %s, fee = %s, cashed_out_at = NOW()
+            WHERE id = %s
+        """, (multiplier, profit, fee, bet["id"]))
+        c.execute("""
+            INSERT INTO transactions (user_id, type, currency, amount, fee, metadata)
+            VALUES (%s, 'crash_win', %s, %s, %s, %s)
+        """, (user_id, bet["currency"], net_payout, fee, json.dumps({"round_id": state["round_id"], "multiplier": multiplier})))
+
+    return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     db_user = get_or_create_user(
@@ -247,6 +338,7 @@ async def run_bot():
 
 if __name__ == "__main__":
     init_db()
+    start_crash_engine()
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     asyncio.run(run_bot())
