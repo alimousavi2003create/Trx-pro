@@ -39,3 +39,4 @@ REFERRAL_COMMISSION_RATES = {
 ADMIN_TELEGRAM_IDS = set(
     x.strip() for x in os.environ.get("ADMIN_TELEGRAM_IDS", "").split(",") if x.strip()
 )
+# force rebuild 1783869590
