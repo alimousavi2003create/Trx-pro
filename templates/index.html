@@ -418,6 +418,7 @@ function switchTab(tab) {
   currentTab = tab;
   document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
   document.getElementById('tab-' + tab).classList.remove('hidden');
+  if (tab === 'crash') { startCrashPolling(); } else { stopCrashPolling(); }
   document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
   event.currentTarget.classList.add('active');
 }
@@ -510,8 +511,110 @@ function doubleBet() {
   el.value = Math.floor(parseInt(el.value) * 2);
 }
 
-function handleCrashAction() {
-  if (crashState === 'waiting') showToast('Crash game coming in Phase 3!', 'success');
+let crashPollTimer = null;
+let userHasBet = false;
+let lastRoundId = null;
+
+function startCrashPolling() {
+  if (crashPollTimer) return;
+  pollCrashState();
+  crashPollTimer = setInterval(pollCrashState, 300);
+}
+
+function stopCrashPolling() {
+  if (crashPollTimer) { clearInterval(crashPollTimer); crashPollTimer = null; }
+}
+
+async function pollCrashState() {
+  try {
+    const r = await fetch(API_BASE + '/api/crash/state');
+    const d = await r.json();
+    if (!d.success) return;
+
+    if (d.round_id !== lastRoundId) {
+      userHasBet = false;
+      lastRoundId = d.round_id;
+      updateCrashHistory(d.history);
+    }
+
+    crashState = d.status;
+    const multNum = document.getElementById('multNum');
+    const multLabel = document.getElementById('multLabel');
+    const btn = document.getElementById('crashActionBtn');
+
+    if (d.status === 'waiting') {
+      const left = Math.max(0, Math.ceil(d.wait_seconds - d.phase_elapsed));
+      multNum.textContent = '1.00x';
+      multLabel.textContent = `STARTING IN ${left}s`;
+      btn.textContent = userHasBet ? 'BET PLACED' : 'PLACE BET';
+      btn.disabled = userHasBet;
+      btn.classList.toggle('btn-bet', true);
+      btn.classList.remove('btn-cashout');
+    } else if (d.status === 'running') {
+      multNum.textContent = d.multiplier.toFixed(2) + 'x';
+      multLabel.textContent = 'IN FLIGHT';
+      if (userHasBet) {
+        btn.textContent = 'CASHOUT ' + (parseFloat(document.getElementById('betAmount').value) * d.multiplier).toFixed(2);
+        btn.classList.add('btn-cashout');
+      } else {
+        btn.textContent = 'WAIT FOR NEXT ROUND';
+        btn.disabled = true;
+      }
+    } else if (d.status === 'crashed') {
+      multNum.textContent = d.crash_point.toFixed(2) + 'x';
+      multLabel.textContent = 'CRASHED';
+      btn.textContent = 'ROUND OVER';
+      btn.disabled = true;
+      userHasBet = false;
+    }
+  } catch (e) { console.error('crash poll error', e); }
+}
+
+function updateCrashHistory(history) {
+  const el = document.getElementById('crashHistory');
+  el.innerHTML = (history || []).slice(0, 6).map(v => {
+    const cls = v >= 2 ? 'history-win' : 'history-loss';
+    return `<div class="history-chip ${cls}">${v.toFixed(2)}x</div>`;
+  }).join('');
+}
+
+async function handleCrashAction() {
+  if (crashState === 'waiting' && !userHasBet) {
+    const amount = parseFloat(document.getElementById('betAmount').value);
+    if (!amount || amount <= 0) { showToast('Enter a valid bet amount', 'error'); return; }
+    try {
+      const r = await fetch(API_BASE + '/api/crash/bet', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, init_data: initDataRaw, currency: crashCurrency, amount })
+      });
+      const d = await r.json();
+      if (d.success) {
+        userHasBet = true;
+        showToast('Bet placed!', 'success');
+      } else {
+        showToast(d.error || 'Bet failed', 'error');
+      }
+    } catch (e) { showToast('Network error', 'error'); }
+  } else if (crashState === 'running' && userHasBet) {
+    try {
+      const r = await fetch(API_BASE + '/api/crash/cashout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, init_data: initDataRaw })
+      });
+      const d = await r.json();
+      if (d.success) {
+        userHasBet = false;
+        showToast(`Cashed out at ${d.multiplier.toFixed(2)}x! +${d.payout.toFixed(2)}`, 'success');
+        try {
+          const ur = await fetch(API_BASE + '/api/user/' + userId);
+          const ud = await ur.json();
+          if (ud.success) { userData = ud.user; updateUI(); }
+        } catch (e) {}
+      } else {
+        showToast(d.error || 'Cashout failed', 'error');
+      }
+    } catch (e) { showToast('Network error', 'error'); }
+  }
 }
 
 function copyRefCode() {
