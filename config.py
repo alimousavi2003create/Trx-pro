@@ -6,7 +6,7 @@ load_dotenv()
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///trx_pro.db")
 REDIS_URL = os.environ.get("REDIS_URL", "")
 TRONGRID_API_KEY = os.environ.get("TRONGRID_API_KEY", "")
 TRON_NETWORK = os.environ.get("TRON_NETWORK", "mainnet")
