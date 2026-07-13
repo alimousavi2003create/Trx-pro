@@ -255,6 +255,13 @@ html, body {
           <button class="quick-btn" onclick="halveBet()">½</button>
           <button class="quick-btn" onclick="doubleBet()">2x</button>
         </div>
+        <div class="autocashout-row" style="margin: 14px 0;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; color:#9aa0b8; margin-bottom:8px;">
+            <span>AUTO CASHOUT</span>
+            <span id="autoCashoutLabel">OFF</span>
+          </div>
+          <input type="range" id="autoCashoutSlider" min="110" max="1010" step="1" value="1010" style="width:100%; accent-color:#3df2d4;">
+        </div>
         <button class="action-btn btn-bet" id="crashActionBtn" onclick="handleCrashAction()">PLACE BET</button>
       </div>
     </div>
@@ -514,6 +521,24 @@ function doubleBet() {
 let crashPollTimer = null;
 let userHasBet = false;
 let lastRoundId = null;
+let autoCashoutTarget = Infinity;
+let cashoutInProgress = false;
+
+function initAutoCashoutSlider() {
+  const el = document.getElementById('autoCashoutSlider');
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const raw = parseInt(el.value, 10);
+    if (raw > 1000) {
+      autoCashoutTarget = Infinity;
+      document.getElementById('autoCashoutLabel').textContent = 'OFF';
+    } else {
+      autoCashoutTarget = raw / 100;
+      document.getElementById('autoCashoutLabel').textContent = autoCashoutTarget.toFixed(2) + 'x';
+    }
+  });
+}
+initAutoCashoutSlider();
 
 function startCrashPolling() {
   if (crashPollTimer) return;
@@ -553,6 +578,9 @@ async function pollCrashState() {
     } else if (d.status === 'running') {
       multNum.textContent = d.multiplier.toFixed(2) + 'x';
       multLabel.textContent = 'IN FLIGHT';
+      if (userHasBet && autoCashoutTarget !== Infinity && d.multiplier >= autoCashoutTarget) {
+        performCashout();
+      }
       if (userHasBet) {
         btn.textContent = 'CASHOUT ' + (parseFloat(document.getElementById('betAmount').value) * d.multiplier).toFixed(2);
         btn.classList.add('btn-cashout');
@@ -579,6 +607,30 @@ function updateCrashHistory(history) {
   }).join('');
 }
 
+async function performCashout() {
+  if (cashoutInProgress || !userHasBet) return;
+  cashoutInProgress = true;
+  try {
+    const r = await fetch(API_BASE + '/api/crash/cashout', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, init_data: initDataRaw })
+    });
+    const d = await r.json();
+    if (d.success) {
+      userHasBet = false;
+      showToast(`Cashed out at ${d.multiplier.toFixed(2)}x! +${d.payout.toFixed(2)}`, 'success');
+      try {
+        const ur = await fetch(API_BASE + '/api/user/' + userId);
+        const ud = await ur.json();
+        if (ud.success) { userData = ud.user; updateUI(); }
+      } catch (e) {}
+    } else {
+      showToast(d.error || 'Cashout failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+  cashoutInProgress = false;
+}
+
 async function handleCrashAction() {
   if (crashState === 'waiting' && !userHasBet) {
     const amount = parseFloat(document.getElementById('betAmount').value);
@@ -600,24 +652,7 @@ async function handleCrashAction() {
       }
     } catch (e) { showToast('Network error', 'error'); }
   } else if (crashState === 'running' && userHasBet) {
-    try {
-      const r = await fetch(API_BASE + '/api/crash/cashout', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, init_data: initDataRaw })
-      });
-      const d = await r.json();
-      if (d.success) {
-        userHasBet = false;
-        showToast(`Cashed out at ${d.multiplier.toFixed(2)}x! +${d.payout.toFixed(2)}`, 'success');
-        try {
-          const ur = await fetch(API_BASE + '/api/user/' + userId);
-          const ud = await ur.json();
-          if (ud.success) { userData = ud.user; updateUI(); }
-        } catch (e) {}
-      } else {
-        showToast(d.error || 'Cashout failed', 'error');
-      }
-    } catch (e) { showToast('Network error', 'error'); }
+    performCashout();
   }
 }
 
