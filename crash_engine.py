@@ -40,8 +40,9 @@ def generate_crash_point(round_id, server_seed):
 
 
 def current_multiplier(elapsed):
-    import math
-    return round(math.exp(GROWTH_RATE * elapsed), 2)
+    K = 0.09
+    P = 1.35
+    return round(1 + K * (elapsed ** P), 2)
 
 
 def _new_round():

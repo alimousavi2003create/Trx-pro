@@ -556,6 +556,7 @@ async function pollCrashState() {
       if (userHasBet) {
         btn.textContent = 'CASHOUT ' + (parseFloat(document.getElementById('betAmount').value) * d.multiplier).toFixed(2);
         btn.classList.add('btn-cashout');
+        btn.disabled = false;
       } else {
         btn.textContent = 'WAIT FOR NEXT ROUND';
         btn.disabled = true;
