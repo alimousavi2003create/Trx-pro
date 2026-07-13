@@ -106,6 +106,14 @@ def init_db():
             )
         """)
         c.execute("""
+            CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                id SERIAL PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(user_id),
+                currency TEXT NOT NULL, amount REAL NOT NULL, destination_address TEXT NOT NULL,
+                status TEXT DEFAULT 'pending', admin_note TEXT,
+                created_at TIMESTAMP DEFAULT NOW(), processed_at TIMESTAMP
+            )
+        """)
+        c.execute("""
             CREATE TABLE IF NOT EXISTS daily_stats (
                 date DATE PRIMARY KEY, active_users INTEGER DEFAULT 0,
                 total_taps INTEGER DEFAULT 0, total_mined_trx REAL DEFAULT 0,

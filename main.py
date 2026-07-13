@@ -306,6 +306,163 @@ def api_crash_cashout():
 
     return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
 
+@app.route("/api/withdraw", methods=["POST"])
+def api_withdraw():
+    data = request.json
+    user_id = str(data.get("user_id"))
+    init_data_raw = data.get("init_data", "")
+    currency = data.get("currency", "TRX")
+    amount = data.get("amount")
+    destination = str(data.get("destination_address", "")).strip()
+    try:
+        verify_init_data(init_data_raw)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 403
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid amount"}), 400
+    if amount <= 0 or not destination:
+        return jsonify({"success": False, "error": "Invalid request"}), 400
+    if currency == "TRX" and amount < config.MIN_WITHDRAWAL_TRX:
+        return jsonify({"success": False, "error": f"Minimum withdrawal is {config.MIN_WITHDRAWAL_TRX} TRX"}), 400
+
+    user = get_user(user_id)
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+    balance_col = "balance_trx" if currency == "TRX" else "balance_ton"
+    if user[balance_col] < amount:
+        return jsonify({"success": False, "error": "Insufficient balance"}), 400
+
+    with get_db_cursor() as c:
+        c.execute(f"UPDATE users SET {balance_col} = {balance_col} - %s WHERE user_id = %s",
+                   (amount, user_id))
+        c.execute("""
+            INSERT INTO withdrawal_requests (user_id, currency, amount, destination_address, status)
+            VALUES (%s, %s, %s, %s, 'pending') RETURNING id
+        """, (user_id, currency, amount, destination))
+        wid = c.fetchone()["id"]
+        c.execute("""
+            INSERT INTO transactions (user_id, type, currency, amount, metadata)
+            VALUES (%s, 'withdrawal_request', %s, %s, %s)
+        """, (user_id, currency, -amount, json.dumps({"withdrawal_id": wid, "destination": destination})))
+
+    return jsonify({"success": True, "message": "Withdrawal request submitted", "withdrawal_id": wid})
+
+
+def is_admin(telegram_user_id):
+    return str(telegram_user_id) in config.ADMIN_TELEGRAM_IDS
+
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("Access denied.")
+        return
+    with get_db_cursor() as c:
+        c.execute("SELECT COUNT(*) as cnt FROM withdrawal_requests WHERE status = 'pending'")
+        pending = c.fetchone()["cnt"]
+        c.execute("SELECT COUNT(*) as cnt FROM users")
+        total_users = c.fetchone()["cnt"]
+    await update.message.reply_text(
+        f"Admin Panel\n\n"
+        f"Total users: {total_users}\n"
+        f"Pending withdrawals: {pending}\n\n"
+        f"Commands:\n"
+        f"/pending - list pending withdrawals\n"
+        f"/approve <id> - approve and mark as paid\n"
+        f"/reject <id> - reject and refund\n"
+        f"/credit <user_id> <TRX|TON> <amount> - manually credit a user"
+    )
+
+
+async def admin_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    with get_db_cursor() as c:
+        c.execute("""
+            SELECT * FROM withdrawal_requests WHERE status = 'pending' ORDER BY created_at ASC LIMIT 20
+        """)
+        rows = c.fetchall()
+    if not rows:
+        await update.message.reply_text("No pending withdrawals.")
+        return
+    lines = ["Pending withdrawals:\n"]
+    for r in rows:
+        lines.append(f"#{r['id']} | user {r['user_id']} | {r['amount']} {r['currency']} -> {r['destination_address']}")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /approve <id>")
+        return
+    wid = context.args[0]
+    with get_db_cursor() as c:
+        c.execute("SELECT * FROM withdrawal_requests WHERE id = %s AND status = 'pending'", (wid,))
+        req = c.fetchone()
+        if not req:
+            await update.message.reply_text("Request not found or already processed.")
+            return
+        c.execute("UPDATE withdrawal_requests SET status = 'paid', processed_at = NOW() WHERE id = %s", (wid,))
+        c.execute("""
+            INSERT INTO transactions (user_id, type, currency, amount, metadata)
+            VALUES (%s, 'withdrawal_paid', %s, %s, %s)
+        """, (req["user_id"], req["currency"], -req["amount"], json.dumps({"withdrawal_id": wid})))
+    await update.message.reply_text(f"Withdrawal #{wid} marked as paid.")
+
+
+async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /reject <id>")
+        return
+    wid = context.args[0]
+    with get_db_cursor() as c:
+        c.execute("SELECT * FROM withdrawal_requests WHERE id = %s AND status = 'pending'", (wid,))
+        req = c.fetchone()
+        if not req:
+            await update.message.reply_text("Request not found or already processed.")
+            return
+        balance_col = "balance_trx" if req["currency"] == "TRX" else "balance_ton"
+        c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
+                   (req["amount"], req["user_id"]))
+        c.execute("UPDATE withdrawal_requests SET status = 'rejected', processed_at = NOW() WHERE id = %s", (wid,))
+    await update.message.reply_text(f"Withdrawal #{wid} rejected and refunded.")
+
+
+async def admin_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    if len(context.args) < 3:
+        await update.message.reply_text("Usage: /credit <user_id> <TRX|TON> <amount>")
+        return
+    target_user_id, currency, amount_str = context.args[0], context.args[1].upper(), context.args[2]
+    try:
+        amount = float(amount_str)
+    except ValueError:
+        await update.message.reply_text("Invalid amount.")
+        return
+    if currency not in ("TRX", "TON"):
+        await update.message.reply_text("Currency must be TRX or TON.")
+        return
+    user = get_user(target_user_id)
+    if not user:
+        await update.message.reply_text("User not found.")
+        return
+    balance_col = "balance_trx" if currency == "TRX" else "balance_ton"
+    with get_db_cursor() as c:
+        c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
+                   (amount, target_user_id))
+        c.execute("""
+            INSERT INTO transactions (user_id, type, currency, amount, metadata)
+            VALUES (%s, 'admin_credit', %s, %s, %s)
+        """, (target_user_id, currency, amount, json.dumps({"admin_id": str(update.effective_user.id)})))
+    await update.message.reply_text(f"Credited {amount} {currency} to user {target_user_id}.")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     db_user = get_or_create_user(
@@ -330,6 +487,11 @@ def run_flask():
 async def run_bot():
     app_bot = Application.builder().token(config.BOT_TOKEN).build()
     app_bot.add_handler(CommandHandler("start", start))
+    app_bot.add_handler(CommandHandler("admin", admin_panel))
+    app_bot.add_handler(CommandHandler("pending", admin_pending))
+    app_bot.add_handler(CommandHandler("approve", admin_approve))
+    app_bot.add_handler(CommandHandler("reject", admin_reject))
+    app_bot.add_handler(CommandHandler("credit", admin_credit))
     await app_bot.initialize()
     await app_bot.start()
     await app_bot.updater.start_polling()
