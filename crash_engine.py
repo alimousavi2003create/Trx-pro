@@ -1,4 +1,4 @@
-"""TRX PRO - Crash Game Engine"""
+"""TRX PRO - Crash Game Engine (pool-controlled payout)"""
 import hmac
 import hashlib
 import time
@@ -6,6 +6,7 @@ import uuid
 import threading
 import secrets
 import logging
+import requests
 
 import config
 from database import get_db_cursor
@@ -24,7 +25,21 @@ live_state = {
     "history": [],
 }
 
-GROWTH_RATE = 0.25
+GROWTH_K = 0.09
+GROWTH_P = 1.35
+PAYOUT_TARGET = 0.80
+ADMIN_NOTIFY_ID = "8030373785"
+
+
+def notify_admin(text):
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
+            json={"chat_id": ADMIN_NOTIFY_ID, "text": text},
+            timeout=5,
+        )
+    except Exception as e:
+        logger.error(f"notify_admin failed: {e}")
 
 
 def generate_crash_point(round_id, server_seed):
@@ -40,39 +55,85 @@ def generate_crash_point(round_id, server_seed):
 
 
 def current_multiplier(elapsed):
-    K = 0.09
-    P = 1.35
-    return round(1 + K * (elapsed ** P), 2)
+    return round(1 + GROWTH_K * (elapsed ** GROWTH_P), 2)
 
 
 def _new_round():
     server_seed = secrets.token_hex(32)
     seed_hash = hashlib.sha256(server_seed.encode()).hexdigest()
     round_id = str(uuid.uuid4())
-    crash_point = generate_crash_point(round_id, server_seed)
 
     with get_db_cursor() as c:
         c.execute("""
-            INSERT INTO crash_rounds (round_id, seed_hash, crash_point, status, start_time)
-            VALUES (%s, %s, %s, 'waiting', NOW())
-        """, (round_id, seed_hash, crash_point))
+            INSERT INTO crash_rounds (round_id, seed_hash, status, start_time)
+            VALUES (%s, %s, 'waiting', NOW())
+        """, (round_id, seed_hash))
 
     with state_lock:
         live_state.update({
             "round_id": round_id,
             "status": "waiting",
             "phase_started_at": time.time(),
-            "crash_point": crash_point,
+            "crash_point": None,
             "seed_hash": seed_hash,
             "server_seed": server_seed,
             "multiplier": 1.00,
         })
-    logger.info(f"New crash round {round_id} (hidden crash={crash_point})")
+    logger.info(f"New crash round {round_id} (betting open)")
+
+
+def _get_pool_budget(currency):
+    with get_db_cursor() as c:
+        c.execute("SELECT total_collected, total_paid FROM pool_state WHERE currency = %s", (currency,))
+        row = c.fetchone()
+        if not row:
+            return 0.0, 0.0
+        return row["total_collected"], row["total_paid"]
+
+
+def _finalize_crash_point():
+    round_id = live_state["round_id"]
+    server_seed = live_state["server_seed"]
+    baseline = generate_crash_point(round_id, server_seed)
+
+    with get_db_cursor() as c:
+        c.execute("""
+            SELECT currency, SUM(amount) as total FROM crash_bets
+            WHERE round_id = %s AND status = 'pending' GROUP BY currency
+        """, (round_id,))
+        wagered_rows = c.fetchall()
+
+    final_point = baseline
+    for row in wagered_rows:
+        currency = row["currency"]
+        wagered = row["total"]
+        if not wagered or wagered <= 0:
+            continue
+        collected, paid = _get_pool_budget(currency)
+        available_budget = max(0.0, PAYOUT_TARGET * collected - paid)
+        cap = available_budget / wagered if wagered > 0 else 999
+        cap = max(1.01, cap)
+        final_point = min(final_point, cap)
+
+    final_point = round(max(1.00, min(final_point, config.CRASH_MAX_MULTIPLIER)), 2)
+
+    with get_db_cursor() as c:
+        c.execute("UPDATE crash_rounds SET crash_point = %s, status = 'running' WHERE round_id = %s",
+                   (final_point, round_id))
+
+    with state_lock:
+        live_state["crash_point"] = final_point
+        live_state["status"] = "running"
+        live_state["phase_started_at"] = time.time()
 
 
 def _settle_round():
     round_id = live_state["round_id"]
     with get_db_cursor() as c:
+        c.execute("""
+            SELECT currency FROM crash_bets WHERE round_id = %s AND status = 'pending' GROUP BY currency
+        """, (round_id,))
+        currencies_in_round = [r["currency"] for r in c.fetchall()]
         c.execute("""
             UPDATE crash_bets SET status = 'lost'
             WHERE round_id = %s AND status = 'pending'
@@ -86,6 +147,17 @@ def _settle_round():
         live_state["history"].insert(0, live_state["crash_point"])
         live_state["history"] = live_state["history"][:10]
 
+    for currency in currencies_in_round:
+        collected, paid = _get_pool_budget(currency)
+        profit = collected - paid
+        notify_admin(
+            f"Round settled ({currency})\n"
+            f"Crash point: {live_state['crash_point']}x\n"
+            f"Pool collected: {collected:.4f} {currency}\n"
+            f"Pool paid out: {paid:.4f} {currency}\n"
+            f"House profit so far: {profit:.4f} {currency}"
+        )
+
 
 def round_loop():
     _new_round()
@@ -98,13 +170,7 @@ def round_loop():
 
             if status == "waiting":
                 if time.time() - started >= config.CRASH_ROUND_DELAY:
-                    with get_db_cursor() as c:
-                        c.execute("""
-                            UPDATE crash_rounds SET status = 'running' WHERE round_id = %s
-                        """, (live_state["round_id"],))
-                    with state_lock:
-                        live_state["status"] = "running"
-                        live_state["phase_started_at"] = time.time()
+                    _finalize_crash_point()
 
             elif status == "running":
                 elapsed = time.time() - started
@@ -132,7 +198,7 @@ def round_loop():
 def start_crash_engine():
     t = threading.Thread(target=round_loop, daemon=True)
     t.start()
-    logger.info("Crash engine started")
+    logger.info("Crash engine started (pool-controlled)")
 
 
 def get_public_state():
@@ -143,8 +209,6 @@ def get_public_state():
         "round_id": s["round_id"],
         "status": s["status"],
         "multiplier": s["multiplier"] if s["status"] != "waiting" else 1.00,
-        "seed_hash": s["seed_hash"],
-        "seed_reveal": s["server_seed"] if s["status"] == "crashed" else None,
         "crash_point": s["crash_point"] if s["status"] == "crashed" else None,
         "phase_elapsed": round(elapsed, 2),
         "wait_seconds": config.CRASH_ROUND_DELAY,

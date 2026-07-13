@@ -106,6 +106,13 @@ def init_db():
             )
         """)
         c.execute("""
+            CREATE TABLE IF NOT EXISTS pool_state (
+                currency TEXT PRIMARY KEY,
+                total_collected REAL DEFAULT 0,
+                total_paid REAL DEFAULT 0
+            )
+        """)
+        c.execute("""
             CREATE TABLE IF NOT EXISTS withdrawal_requests (
                 id SERIAL PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(user_id),
                 currency TEXT NOT NULL, amount REAL NOT NULL, destination_address TEXT NOT NULL,
