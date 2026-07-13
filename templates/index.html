@@ -591,6 +591,9 @@ async function handleCrashAction() {
       const d = await r.json();
       if (d.success) {
         userHasBet = true;
+        userData.balance_trx = (userData.balance_trx || 0) - (crashCurrency === 'TRX' ? amount : 0);
+        userData.balance_ton = (userData.balance_ton || 0) - (crashCurrency === 'TON' ? amount : 0);
+        updateUI();
         showToast('Bet placed!', 'success');
       } else {
         showToast(d.error || 'Bet failed', 'error');
