@@ -332,6 +332,16 @@ html, body {
       </div>
       <div class="wallet-card">
         <div class="wallet-header">
+          <span class="wallet-title">TON Balance</span>
+        </div>
+        <div class="wallet-amount" id="walletTON">0 TON</div>
+        <div class="wallet-actions">
+          <button class="wallet-btn" onclick="depositTRX()">Deposit</button>
+          <button class="wallet-btn" onclick="withdrawTRX()">Withdraw</button>
+        </div>
+      </div>
+      <div class="wallet-card">
+        <div class="wallet-header">
           <span class="wallet-title">TON Wallet</span>
         </div>
         <div id="tonConnectContainer" style="display:flex;justify-content:center;padding:10px 0;">
@@ -418,6 +428,7 @@ function updateUI() {
   document.getElementById('profileName').textContent = firstName;
   document.getElementById('profileLevel').textContent = `Level ${userData.level || 1} ⭐`;
   document.getElementById('walletTRX').textContent = Math.floor(userData.balance_trx || 0).toLocaleString('en-US') + ' TRX';
+  document.getElementById('walletTON').textContent = (userData.balance_ton || 0).toFixed(3).toLocaleString('en-US') + ' TON';
   if (photoUrl) document.getElementById('profileAvatar').innerHTML = `<img src="${photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
 }
 
