@@ -24,7 +24,7 @@ live_state = {
     "history": [],
 }
 
-GROWTH_RATE = 0.08
+GROWTH_RATE = 0.25
 
 
 def generate_crash_point(round_id, server_seed):

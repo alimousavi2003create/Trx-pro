@@ -26,7 +26,24 @@ def get_user(user_id: str) -> dict:
     with get_db_cursor() as c:
         c.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
         row = c.fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        user = dict(row)
+        from datetime import datetime, timezone
+        last_refill = user.get("energy_last_refill")
+        if last_refill and user["energy"] < user["energy_max"]:
+            if last_refill.tzinfo is None:
+                last_refill = last_refill.replace(tzinfo=timezone.utc)
+            elapsed_seconds = (datetime.now(timezone.utc) - last_refill).total_seconds()
+            regen_amount = int(elapsed_seconds // 60) * config.ENERGY_REGEN_RATE
+            if regen_amount > 0:
+                new_energy = min(user["energy_max"], user["energy"] + regen_amount)
+                c.execute(
+                    "UPDATE users SET energy = %s, energy_last_refill = NOW() WHERE user_id = %s RETURNING *",
+                    (new_energy, user_id)
+                )
+                user = dict(c.fetchone())
+        return user
 
 def update_balance(user_id: str, currency: str, amount: float,
                    tx_type: str, metadata: dict = None) -> float:
