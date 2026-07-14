@@ -25,8 +25,8 @@ live_state = {
     "history": [],
 }
 
-GROWTH_K = 0.09
-GROWTH_P = 1.35
+GROWTH_K = 0.00463
+GROWTH_P = 3
 PAYOUT_TARGET = 0.80
 ADMIN_NOTIFY_ID = "8030373785"
 

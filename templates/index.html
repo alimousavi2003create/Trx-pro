@@ -178,6 +178,10 @@ html, body {
       <span class="dot"></span>
       <span id="topBalance">0</span> TRX
     </div>
+    <div class="balance-chip" style="margin-left:6px;">
+      <span class="dot"></span>
+      <span id="topBalanceTON">0</span> TON
+    </div>
   </div>
 
   <div class="content" id="content">
@@ -256,9 +260,12 @@ html, body {
           <button class="quick-btn" onclick="doubleBet()">2x</button>
         </div>
         <div class="autocashout-row" style="margin: 14px 0;">
-          <div style="display:flex; justify-content:space-between; font-size:12px; color:#9aa0b8; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#9aa0b8; margin-bottom:8px;">
             <span>AUTO CASHOUT</span>
-            <span id="autoCashoutLabel">OFF</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <input type="number" id="autoCashoutInput" min="1.01" step="0.01" placeholder="off" style="width:64px; background:rgba(255,255,255,0.06); border:1px solid #333; border-radius:6px; color:#fff; padding:4px 6px; font-size:12px;">
+              <span id="autoCashoutLabel">OFF</span>
+            </div>
           </div>
           <input type="range" id="autoCashoutSlider" min="110" max="1010" step="1" value="1010" style="width:100%; accent-color:#3df2d4;">
         </div>
@@ -417,6 +424,7 @@ async function initAuth() {
 
 function updateUI() {
   document.getElementById('topBalance').textContent = Math.floor(userData.balance_trx || 0).toLocaleString('en-US');
+  document.getElementById('topBalanceTON').textContent = (userData.balance_ton || 0).toFixed(2);
   document.getElementById('statBalance').textContent = Math.floor(userData.balance_trx || 0).toLocaleString('en-US');
   document.getElementById('statPower').textContent = (userData.mining_power || 1.0).toFixed(1);
   document.getElementById('statLevel').textContent = userData.level || 1;
@@ -534,20 +542,66 @@ let userHasBet = false;
 let lastRoundId = null;
 let autoCashoutTarget = Infinity;
 let cashoutInProgress = false;
+let queuedBet = null;
+let animFrameId = null;
+let animAnchorTime = 0;
+let animBaseElapsed = 0;
+const CRASH_GROWTH_K = 0.00463;
+const CRASH_GROWTH_P = 3;
+
+function startMultiplierAnimation(baseElapsed) {
+  animBaseElapsed = baseElapsed;
+  animAnchorTime = performance.now();
+  if (!animFrameId) animFrameId = requestAnimationFrame(tickMultiplier);
+}
+
+function stopMultiplierAnimation() {
+  if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+}
+
+function tickMultiplier() {
+  if (crashState !== 'running') { animFrameId = null; return; }
+  const elapsedSinceAnchor = (performance.now() - animAnchorTime) / 1000;
+  const estElapsed = animBaseElapsed + elapsedSinceAnchor;
+  const mult = 1 + CRASH_GROWTH_K * Math.pow(estElapsed, CRASH_GROWTH_P);
+  const multNumEl = document.getElementById('multNum');
+  if (multNumEl) multNumEl.textContent = mult.toFixed(2) + 'x';
+  if (userHasBet && autoCashoutTarget !== Infinity && mult >= autoCashoutTarget) {
+    performCashout();
+  }
+  animFrameId = requestAnimationFrame(tickMultiplier);
+}
 
 function initAutoCashoutSlider() {
   const el = document.getElementById('autoCashoutSlider');
+  const inputEl = document.getElementById('autoCashoutInput');
   if (!el) return;
   el.addEventListener('input', () => {
     const raw = parseInt(el.value, 10);
     if (raw > 1000) {
       autoCashoutTarget = Infinity;
       document.getElementById('autoCashoutLabel').textContent = 'OFF';
+      if (inputEl) inputEl.value = '';
     } else {
       autoCashoutTarget = raw / 100;
       document.getElementById('autoCashoutLabel').textContent = autoCashoutTarget.toFixed(2) + 'x';
+      if (inputEl) inputEl.value = autoCashoutTarget.toFixed(2);
     }
   });
+  if (inputEl) {
+    inputEl.addEventListener('change', () => {
+      const val = parseFloat(inputEl.value);
+      if (!val || val < 1.01) {
+        autoCashoutTarget = Infinity;
+        document.getElementById('autoCashoutLabel').textContent = 'OFF';
+        el.value = 1010;
+      } else {
+        autoCashoutTarget = val;
+        document.getElementById('autoCashoutLabel').textContent = val.toFixed(2) + 'x';
+        el.value = Math.min(1000, Math.round(val * 100));
+      }
+    });
+  }
 }
 initAutoCashoutSlider();
 
@@ -567,10 +621,16 @@ async function pollCrashState() {
     const d = await r.json();
     if (!d.success) return;
 
-    if (d.round_id !== lastRoundId) {
+    const isNewRound = d.round_id !== lastRoundId;
+    if (isNewRound) {
       userHasBet = false;
       lastRoundId = d.round_id;
       updateCrashHistory(d.history);
+      if (d.status === 'waiting' && queuedBet) {
+        const qb = queuedBet;
+        queuedBet = null;
+        placeBetNow(qb.amount, qb.currency);
+      }
     }
 
     crashState = d.status;
@@ -579,6 +639,7 @@ async function pollCrashState() {
     const btn = document.getElementById('crashActionBtn');
 
     if (d.status === 'waiting') {
+      stopMultiplierAnimation();
       const left = Math.max(0, Math.ceil(d.wait_seconds - d.phase_elapsed));
       multNum.textContent = '1.00x';
       multLabel.textContent = `STARTING IN ${left}s`;
@@ -587,24 +648,33 @@ async function pollCrashState() {
       btn.classList.toggle('btn-bet', true);
       btn.classList.remove('btn-cashout');
     } else if (d.status === 'running') {
-      multNum.textContent = d.multiplier.toFixed(2) + 'x';
+      if (!animFrameId) startMultiplierAnimation(d.phase_elapsed);
+      else { animBaseElapsed = d.phase_elapsed; animAnchorTime = performance.now(); }
       multLabel.textContent = 'IN FLIGHT';
-      if (userHasBet && autoCashoutTarget !== Infinity && d.multiplier >= autoCashoutTarget) {
-        performCashout();
-      }
       if (userHasBet) {
-        btn.textContent = 'CASHOUT ' + (parseFloat(document.getElementById('betAmount').value) * d.multiplier).toFixed(2);
+        btn.textContent = 'CASHOUT';
         btn.classList.add('btn-cashout');
         btn.disabled = false;
+      } else if (queuedBet) {
+        btn.textContent = `CANCEL QUEUED (${queuedBet.amount} ${queuedBet.currency})`;
+        btn.classList.remove('btn-cashout');
+        btn.disabled = false;
       } else {
-        btn.textContent = 'WAIT FOR NEXT ROUND';
-        btn.disabled = true;
+        btn.textContent = 'BET NEXT ROUND';
+        btn.classList.remove('btn-cashout');
+        btn.disabled = false;
       }
     } else if (d.status === 'crashed') {
+      stopMultiplierAnimation();
       multNum.textContent = d.crash_point.toFixed(2) + 'x';
       multLabel.textContent = 'CRASHED';
-      btn.textContent = 'ROUND OVER';
-      btn.disabled = true;
+      if (queuedBet) {
+        btn.textContent = `CANCEL QUEUED (${queuedBet.amount} ${queuedBet.currency})`;
+        btn.disabled = false;
+      } else {
+        btn.textContent = 'BET NEXT ROUND';
+        btn.disabled = false;
+      }
       userHasBet = false;
     }
   } catch (e) { console.error('crash poll error', e); }
@@ -642,28 +712,44 @@ async function performCashout() {
   cashoutInProgress = false;
 }
 
+async function placeBetNow(amount, currency) {
+  try {
+    const r = await fetch(API_BASE + '/api/crash/bet', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, init_data: initDataRaw, currency, amount })
+    });
+    const d = await r.json();
+    if (d.success) {
+      userHasBet = true;
+      userData.balance_trx = (userData.balance_trx || 0) - (currency === 'TRX' ? amount : 0);
+      userData.balance_ton = (userData.balance_ton || 0) - (currency === 'TON' ? amount : 0);
+      updateUI();
+      showToast('Bet placed!', 'success');
+      return true;
+    } else {
+      showToast(d.error || 'Bet failed', 'error');
+      return false;
+    }
+  } catch (e) { showToast('Network error', 'error'); return false; }
+}
+
 async function handleCrashAction() {
   if (crashState === 'waiting' && !userHasBet) {
     const amount = parseFloat(document.getElementById('betAmount').value);
     if (!amount || amount <= 0) { showToast('Enter a valid bet amount', 'error'); return; }
-    try {
-      const r = await fetch(API_BASE + '/api/crash/bet', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, init_data: initDataRaw, currency: crashCurrency, amount })
-      });
-      const d = await r.json();
-      if (d.success) {
-        userHasBet = true;
-        userData.balance_trx = (userData.balance_trx || 0) - (crashCurrency === 'TRX' ? amount : 0);
-        userData.balance_ton = (userData.balance_ton || 0) - (crashCurrency === 'TON' ? amount : 0);
-        updateUI();
-        showToast('Bet placed!', 'success');
-      } else {
-        showToast(d.error || 'Bet failed', 'error');
-      }
-    } catch (e) { showToast('Network error', 'error'); }
+    await placeBetNow(amount, crashCurrency);
   } else if (crashState === 'running' && userHasBet) {
     performCashout();
+  } else if ((crashState === 'running' || crashState === 'crashed') && !userHasBet) {
+    if (queuedBet) {
+      queuedBet = null;
+      showToast('Queued bet cancelled', 'success');
+    } else {
+      const amount = parseFloat(document.getElementById('betAmount').value);
+      if (!amount || amount <= 0) { showToast('Enter a valid bet amount', 'error'); return; }
+      queuedBet = { currency: crashCurrency, amount };
+      showToast('Bet queued for next round', 'success');
+    }
   }
 }
 
