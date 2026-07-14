@@ -115,6 +115,9 @@ def _finalize_crash_point():
         cap = max(1.01, cap)
         final_point = min(final_point, cap)
 
+    import random
+    if final_point < 1.15:
+        final_point = round(random.uniform(1.00, 1.15), 2)
     final_point = round(max(1.00, min(final_point, config.CRASH_MAX_MULTIPLIER)), 2)
 
     with get_db_cursor() as c:

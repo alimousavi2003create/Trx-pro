@@ -261,6 +261,11 @@ def api_crash_bet():
             INSERT INTO crash_bets (round_id, user_id, currency, amount, status)
             VALUES (%s, %s, %s, %s, 'pending')
         """, (state["round_id"], user_id, currency, amount))
+        c.execute("""
+            INSERT INTO pool_state (currency, total_collected, total_paid)
+            VALUES (%s, %s, 0)
+            ON CONFLICT (currency) DO UPDATE SET total_collected = pool_state.total_collected + %s
+        """, (currency, amount, amount))
 
     return jsonify({"success": True, "message": "Bet placed"})
 
@@ -303,6 +308,11 @@ def api_crash_cashout():
             INSERT INTO transactions (user_id, type, currency, amount, fee, metadata)
             VALUES (%s, 'crash_win', %s, %s, %s, %s)
         """, (user_id, bet["currency"], net_payout, fee, json.dumps({"round_id": state["round_id"], "multiplier": multiplier})))
+        c.execute("""
+            INSERT INTO pool_state (currency, total_collected, total_paid)
+            VALUES (%s, 0, %s)
+            ON CONFLICT (currency) DO UPDATE SET total_paid = pool_state.total_paid + %s
+        """, (bet["currency"], net_payout, net_payout))
 
     return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
 
