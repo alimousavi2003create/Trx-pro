@@ -1,0 +1,15 @@
+[33mbdafd8e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m fix: faster pool payout convergence toward 80% target; show live payout amount on cashout button
+[33m827b3e1[m feat: max crash 50x, faster ramp, smooth 60fps multiplier animation, numeric auto-cashout input, TON top balance, queue bet for next round
+[33mb1b4968[m fix: actively pace crash-point release from pool budget instead of relying on passive random baseline
+[33m94b9d24[m fix: wire pool_state hooks into bet/cashout endpoints (was stuck at 0); add crash-point variance for low-budget rounds
+[33m9a10b84[m feat: pool-controlled crash payout system with admin profit notifications; remove provably-fair claim
+[33m2098421[m feat: display TON balance in profile tab
+[33m9d2f122[m feat: withdrawal request system with admin approval + admin manual credit commands
+[33md694428[m feat: add auto-cashout slider for crash game
+[33m2ee5de8[m fix: force en-US locale for balance numbers to prevent Persian digits
+[33mb803264[m fix: instantly update displayed balance after placing crash bet
+[33mf234017[m fix: correct cashout button state; tune crash growth curve (slower start, ramps up)
+[33m89cfc27[m fix: add passive energy regeneration; speed up crash growth rate
+[33mb22c263[m Backup before AI
+[33me34520b[m feat: wire up crash game frontend - live polling, bet/cashout, history
+[33m9f9da44[m feat: add crash game engine with bet/cashout/state endpoints

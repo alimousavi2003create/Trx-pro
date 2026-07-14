@@ -28,14 +28,14 @@ live_state = {
 GROWTH_K = 0.00463
 GROWTH_P = 3
 PAYOUT_TARGET = 0.80
-ADMIN_NOTIFY_ID = "8030373785"
+GROUP_CHAT_ID = "-1003811791270"
 
 
-def notify_admin(text):
+def notify_group(text, sticker_id=None):
     try:
         requests.post(
             f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
-            json={"chat_id": ADMIN_NOTIFY_ID, "text": text},
+            json={"chat_id": GROUP_CHAT_ID, "text": text},
             timeout=5,
         )
     except Exception as e:
@@ -148,9 +148,10 @@ def _settle_round():
     round_id = live_state["round_id"]
     with get_db_cursor() as c:
         c.execute("""
-            SELECT currency FROM crash_bets WHERE round_id = %s AND status = 'pending' GROUP BY currency
+            SELECT currency, COUNT(*) as cnt, SUM(amount) as total
+            FROM crash_bets WHERE round_id = %s AND status = 'pending' GROUP BY currency
         """, (round_id,))
-        currencies_in_round = [r["currency"] for r in c.fetchall()]
+        lost_rows = c.fetchall()
         c.execute("""
             UPDATE crash_bets SET status = 'lost'
             WHERE round_id = %s AND status = 'pending'
@@ -164,16 +165,11 @@ def _settle_round():
         live_state["history"].insert(0, live_state["crash_point"])
         live_state["history"] = live_state["history"][:10]
 
-    for currency in currencies_in_round:
-        collected, paid = _get_pool_budget(currency)
-        profit = collected - paid
-        notify_admin(
-            f"Round settled ({currency})\n"
-            f"Crash point: {live_state['crash_point']}x\n"
-            f"Pool collected: {collected:.4f} {currency}\n"
-            f"Pool paid out: {paid:.4f} {currency}\n"
-            f"House profit so far: {profit:.4f} {currency}"
-        )
+    for row in lost_rows:
+        if row["total"] and row["total"] > 0:
+            notify_group(
+                f"Crashed at {live_state['crash_point']}x - {row['cnt']} bettor(s) lost {row['total']:.2f} {row['currency']}"
+            )
 
 
 def round_loop():

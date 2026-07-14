@@ -14,7 +14,7 @@ import config
 from database import init_db, get_db_cursor
 from auth import verify_init_data
 from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions
-from crash_engine import start_crash_engine, get_public_state
+from crash_engine import start_crash_engine, get_public_state, notify_group
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -314,6 +314,8 @@ def api_crash_cashout():
             ON CONFLICT (currency) DO UPDATE SET total_paid = pool_state.total_paid + %s
         """, (bet["currency"], net_payout, net_payout))
 
+    notify_group(f"Someone won {net_payout:.2f} {bet['currency']} at {multiplier:.2f}x!")
+
     return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
 
 @app.route("/api/withdraw", methods=["POST"])
@@ -443,6 +445,14 @@ async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Withdrawal #{wid} rejected and refunded.")
 
 
+async def admin_resetpool(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    with get_db_cursor() as c:
+        c.execute("UPDATE pool_state SET total_collected = 0, total_paid = 0")
+    await update.message.reply_text("Pool reset to zero for all currencies.")
+
+
 async def admin_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -502,6 +512,7 @@ async def run_bot():
     app_bot.add_handler(CommandHandler("approve", admin_approve))
     app_bot.add_handler(CommandHandler("reject", admin_reject))
     app_bot.add_handler(CommandHandler("credit", admin_credit))
+    app_bot.add_handler(CommandHandler("resetpool", admin_resetpool))
     await app_bot.initialize()
     await app_bot.start()
     await app_bot.updater.start_polling()
