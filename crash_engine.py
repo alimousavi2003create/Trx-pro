@@ -92,6 +92,7 @@ def _get_pool_budget(currency):
 
 
 def _finalize_crash_point():
+    import random
     round_id = live_state["round_id"]
     server_seed = live_state["server_seed"]
     baseline = generate_crash_point(round_id, server_seed)
@@ -103,21 +104,34 @@ def _finalize_crash_point():
         """, (round_id,))
         wagered_rows = c.fetchall()
 
-    final_point = baseline
-    for row in wagered_rows:
-        currency = row["currency"]
-        wagered = row["total"]
-        if not wagered or wagered <= 0:
-            continue
-        collected, paid = _get_pool_budget(currency)
-        available_budget = max(0.0, PAYOUT_TARGET * collected - paid)
-        cap = available_budget / wagered if wagered > 0 else 999
-        cap = max(1.01, cap)
-        final_point = min(final_point, cap)
+    if not wagered_rows:
+        final_point = baseline
+    else:
+        final_point = None
+        PACING_FRACTION = 0.40
+        for row in wagered_rows:
+            currency = row["currency"]
+            wagered = row["total"]
+            if not wagered or wagered <= 0:
+                continue
+            collected, paid = _get_pool_budget(currency)
+            available_budget = max(0.0, PAYOUT_TARGET * collected - paid)
 
-    import random
-    if final_point < 1.15:
-        final_point = round(random.uniform(1.00, 1.15), 2)
+            if available_budget <= 0:
+                point_for_currency = round(random.uniform(1.00, 1.15), 2)
+            else:
+                release = available_budget * PACING_FRACTION
+                target_mult = 1 + (release / wagered)
+                jitter = random.uniform(0.6, 1.3)
+                hard_cap = 1 + (available_budget / wagered)
+                point_for_currency = round(max(1.00, min(target_mult * jitter, hard_cap)), 2)
+
+            if final_point is None or point_for_currency < final_point:
+                final_point = point_for_currency
+
+        if final_point is None:
+            final_point = baseline
+
     final_point = round(max(1.00, min(final_point, config.CRASH_MAX_MULTIPLIER)), 2)
 
     with get_db_cursor() as c:
