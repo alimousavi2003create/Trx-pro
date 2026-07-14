@@ -108,7 +108,7 @@ def _finalize_crash_point():
         final_point = baseline
     else:
         final_point = None
-        PACING_FRACTION = 0.40
+        PACING_FRACTION = 0.75
         for row in wagered_rows:
             currency = row["currency"]
             wagered = row["total"]

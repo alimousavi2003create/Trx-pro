@@ -566,6 +566,11 @@ function tickMultiplier() {
   const mult = 1 + CRASH_GROWTH_K * Math.pow(estElapsed, CRASH_GROWTH_P);
   const multNumEl = document.getElementById('multNum');
   if (multNumEl) multNumEl.textContent = mult.toFixed(2) + 'x';
+  if (userHasBet) {
+    const btn = document.getElementById('crashActionBtn');
+    const amt = parseFloat(document.getElementById('betAmount').value) || 0;
+    if (btn) btn.textContent = 'CASHOUT ' + (amt * mult).toFixed(2);
+  }
   if (userHasBet && autoCashoutTarget !== Infinity && mult >= autoCashoutTarget) {
     performCashout();
   }
