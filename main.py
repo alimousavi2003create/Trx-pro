@@ -8,11 +8,11 @@ import threading
 import logging
 from flask import Flask, request, jsonify, render_template
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 import config
 from database import init_db, get_db_cursor
-from auth import verify_init_data
+from auth import verify_init_data, is_group_member
 from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions
 from crash_engine import start_crash_engine, get_public_state, notify_group
 from deposit_monitor import start_deposit_monitor
@@ -51,6 +51,11 @@ def api_auth_init():
         first_name=verified["first_name"], last_name=verified["last_name"],
         photo_url=verified["photo_url"]
     )
+    if not is_group_member(verified["user_id"]):
+        return jsonify({
+            "success": False, "error": "not_member",
+            "join_url": config.FORCE_JOIN_INVITE_LINK
+        }), 403
     return jsonify({
         "success": True,
         "user": {
@@ -610,20 +615,51 @@ async def admin_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db_user = get_or_create_user(
+    get_or_create_user(
         user_id=str(user.id), username=user.username or "",
         first_name=user.first_name or "", last_name=user.last_name or "", photo_url=""
     )
+    if not is_group_member(str(user.id)):
+        keyboard = [
+            [InlineKeyboardButton("Join Group", url=config.FORCE_JOIN_INVITE_LINK)],
+            [InlineKeyboardButton("I Joined - Check Again", callback_data="check_join")],
+        ]
+        await update.message.reply_text(
+            "You must join our group before using TRX PRO.\n\n"
+            "Tap Join Group, then come back and tap I Joined.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
     keyboard = [[InlineKeyboardButton("Launch TRX PRO", web_app=WebAppInfo(url=config.WEBAPP_URL))]]
     await update.message.reply_text(
-        f"Welcome to TRX PRO, {user.first_name}!\\n\\n"
-        "Mine TRX by tapping\\n"
-        "Buy powerful items\\n"
-        "Play Crash game\\n"
-        "Build your referral network\\n\\n"
+        f"Welcome to TRX PRO, {user.first_name}!\n\n"
+        "Mine TRX by tapping\n"
+        "Buy powerful items\n"
+        "Play Crash game\n"
+        "Build your referral network\n\n"
         "Tap the button below to start:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+
+async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user = query.from_user
+    if not is_group_member(str(user.id)):
+        await query.answer("You haven't joined yet.", show_alert=True)
+        return
+    keyboard = [[InlineKeyboardButton("Launch TRX PRO", web_app=WebAppInfo(url=config.WEBAPP_URL))]]
+    await query.edit_message_text(
+        f"Welcome to TRX PRO, {user.first_name}!\n\n"
+        "Mine TRX by tapping\n"
+        "Buy powerful items\n"
+        "Play Crash game\n"
+        "Build your referral network\n\n"
+        "Tap the button below to start:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
@@ -638,6 +674,7 @@ async def run_bot():
     app_bot.add_handler(CommandHandler("reject", admin_reject))
     app_bot.add_handler(CommandHandler("credit", admin_credit))
     app_bot.add_handler(CommandHandler("resetpool", admin_resetpool))
+    app_bot.add_handler(CallbackQueryHandler(check_join_callback, pattern="^check_join$"))
     await app_bot.initialize()
     await app_bot.start()
     await app_bot.updater.start_polling()

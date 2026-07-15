@@ -38,3 +38,22 @@ def generate_referral_code(user_id: str) -> str:
     import string
     suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"TRX_{user_id[-6:]}_{suffix}"
+
+
+def is_group_member(user_id: str) -> bool:
+    import requests
+    if not config.FORCE_JOIN_CHAT_ID:
+        return True
+    try:
+        resp = requests.get(
+            f"https://api.telegram.org/bot{config.BOT_TOKEN}/getChatMember",
+            params={"chat_id": config.FORCE_JOIN_CHAT_ID, "user_id": user_id},
+            timeout=10,
+        )
+        data = resp.json()
+        if not data.get("ok"):
+            return True
+        status = data["result"]["status"]
+        return status in ("member", "administrator", "creator")
+    except Exception:
+        return True

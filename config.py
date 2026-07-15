@@ -43,3 +43,6 @@ ADMIN_TELEGRAM_IDS = set(
     x.strip() for x in os.environ.get("ADMIN_TELEGRAM_IDS", "").split(",") if x.strip()
 )
 # force rebuild 1783869590
+
+FORCE_JOIN_CHAT_ID = os.environ.get("FORCE_JOIN_CHAT_ID", "@botgrups")
+FORCE_JOIN_INVITE_LINK = os.environ.get("FORCE_JOIN_INVITE_LINK", "https://t.me/botgrups")
