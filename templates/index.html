@@ -295,8 +295,9 @@ html, body {
       <div class="referral-code-box">
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Your Referral Code</div>
         <div class="ref-code" id="refCode">TRX_------</div>
+        <div style="font-size:11px;color:var(--neon-cyan);word-break:break-all;margin-bottom:12px;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;" id="refLinkDisplay">Link unavailable</div>
         <div class="ref-buttons">
-          <button class="ref-btn" onclick="copyRefCode()">📋 Copy</button>
+          <button class="ref-btn" onclick="copyRefCode()">📋 Copy Link</button>
           <button class="ref-btn" onclick="shareRef()">📤 Share</button>
         </div>
       </div>
@@ -529,6 +530,7 @@ function updateUI() {
   document.getElementById('xpText').textContent = `${userData.xp || 0} / ${userData.xp_next || 150}`;
   document.getElementById('levelFill').style.width = ((userData.xp || 0) / (userData.xp_next || 150) * 100) + '%';
   document.getElementById('refCode').textContent = userData.referral_code || 'TRX_------';
+  document.getElementById('refLinkDisplay').textContent = getReferralLink();
   document.getElementById('profileName').textContent = firstName;
   document.getElementById('profileLevel').textContent = `Level ${userData.level || 1} ⭐`;
   document.getElementById('walletTRX').textContent = Math.floor(userData.balance_trx || 0).toLocaleString('en-US') + ' TRX';
@@ -868,22 +870,28 @@ async function handleCrashAction() {
   }
 }
 
+function getReferralLink() {
+  const code = userData.referral_code || '';
+  const botUsername = window.__BOT_USERNAME__ || '';
+  if (!code || !botUsername) return 'Link unavailable';
+  return `https://t.me/${botUsername}?start=${encodeURIComponent(code)}`;
+}
+
 function copyRefCode() {
-  const code = document.getElementById('refCode').textContent;
-  navigator.clipboard.writeText(code).then(() => showToast('Code copied!', 'success'));
+  const link = getReferralLink();
+  if (link === 'Link unavailable') { showToast('Referral link not ready yet', 'error'); return; }
+  navigator.clipboard.writeText(link).then(() => showToast('Referral link copied!', 'success'));
 }
 
 function shareRef() {
   const code = userData.referral_code || '';
-  const botUsername = window.__BOT_USERNAME__ || '';
-  const deepLink = botUsername ? `https://t.me/${botUsername}?start=${encodeURIComponent(code)}` : '';
+  const deepLink = getReferralLink();
   const text = `Join TRX PRO and start mining! Use my code: ${code}`;
-  if (tg && deepLink) {
+  if (deepLink === 'Link unavailable') { showToast('Referral link not ready yet', 'error'); return; }
+  if (tg) {
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent(text)}`);
-  } else if (deepLink) {
-    navigator.clipboard.writeText(deepLink).then(() => showToast('Referral link copied!', 'success'));
   } else {
-    showToast('Referral link unavailable', 'error');
+    navigator.clipboard.writeText(deepLink).then(() => showToast('Referral link copied!', 'success'));
   }
 }
 
