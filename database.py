@@ -45,6 +45,7 @@ def init_db():
             )
         """)
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_usdt REAL DEFAULT 0")
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_automine_at TIMESTAMP DEFAULT NOW()")
         c.execute("""
             CREATE TABLE IF NOT EXISTS shop_items (
                 id SERIAL PRIMARY KEY, item_key TEXT UNIQUE NOT NULL,

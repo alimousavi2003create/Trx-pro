@@ -43,6 +43,35 @@ def get_user(user_id: str) -> dict:
                     (new_energy, user_id)
                 )
                 user = dict(c.fetchone())
+
+        last_mine = user.get("last_automine_at")
+        if last_mine:
+            if last_mine.tzinfo is None:
+                last_mine = last_mine.replace(tzinfo=timezone.utc)
+            elapsed_hours = (datetime.now(timezone.utc) - last_mine).total_seconds() / 3600
+            capped_hours = min(elapsed_hours, 24)
+            if capped_hours > 0.01:
+                c.execute("""
+                    SELECT COALESCE(SUM(s.effect_value), 0) as rate
+                    FROM inventory i JOIN shop_items s ON i.item_key = s.item_key
+                    WHERE i.user_id = %s AND i.is_active = TRUE AND s.effect_type = 'auto_mine'
+                        AND (i.expires_at IS NULL OR i.expires_at > NOW())
+                """, (user_id,))
+                rate_row = c.fetchone()
+                rate = rate_row["rate"] if rate_row else 0
+                if rate and rate > 0:
+                    earned = round(rate * capped_hours, 6)
+                    c.execute("""
+                        UPDATE users SET balance_trx = balance_trx + %s, last_automine_at = NOW()
+                        WHERE user_id = %s RETURNING *
+                    """, (earned, user_id))
+                    user = dict(c.fetchone())
+                    c.execute("""
+                        INSERT INTO transactions (user_id, type, currency, amount, metadata)
+                        VALUES (%s, 'auto_mine', 'TRX', %s, %s)
+                    """, (user_id, earned, json.dumps({"hours": round(capped_hours, 2), "rate": rate})))
+                else:
+                    c.execute("UPDATE users SET last_automine_at = NOW() WHERE user_id = %s", (user_id,))
         return user
 
 def update_balance(user_id: str, currency: str, amount: float,
