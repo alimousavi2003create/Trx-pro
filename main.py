@@ -314,7 +314,7 @@ def api_crash_cashout():
             ON CONFLICT (currency) DO UPDATE SET total_paid = pool_state.total_paid + %s
         """, (bet["currency"], net_payout, net_payout))
 
-    notify_group(f"Someone won {net_payout:.2f} {bet['currency']} at {multiplier:.2f}x!")
+    notify_group(f"\U0001F7E2 Someone won {net_payout:.2f} {bet['currency']} at {multiplier:.2f}x!")
 
     return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
 

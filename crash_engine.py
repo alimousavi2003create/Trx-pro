@@ -25,8 +25,8 @@ live_state = {
     "history": [],
 }
 
-GROWTH_K = 0.00463
-GROWTH_P = 3
+GROWTH_K = 0.05
+GROWTH_P = 1.3
 PAYOUT_TARGET = 0.80
 GROUP_CHAT_ID = "-1003811791270"
 
@@ -168,7 +168,7 @@ def _settle_round():
     for row in lost_rows:
         if row["total"] and row["total"] > 0:
             notify_group(
-                f"Crashed at {live_state['crash_point']}x - {row['cnt']} bettor(s) lost {row['total']:.2f} {row['currency']}"
+                f"\U0001F53B {row['cnt']} bettor(s) lost {row['total']:.2f} {row['currency']} (crashed at {live_state['crash_point']}x)"
             )
 
 
