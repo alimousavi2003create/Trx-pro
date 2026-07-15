@@ -46,3 +46,6 @@ ADMIN_TELEGRAM_IDS = set(
 
 FORCE_JOIN_CHAT_ID = os.environ.get("FORCE_JOIN_CHAT_ID", "@botgrups")
 FORCE_JOIN_INVITE_LINK = os.environ.get("FORCE_JOIN_INVITE_LINK", "https://t.me/botgrups")
+
+BINARY_MATCH_VOLUME = float(os.environ.get("BINARY_MATCH_VOLUME", "1000"))
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "")

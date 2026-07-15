@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 import config
 from database import init_db, get_db_cursor
 from auth import verify_init_data, is_group_member
-from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions
+from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral
 from crash_engine import start_crash_engine, get_public_state, notify_group
 from deposit_monitor import start_deposit_monitor
 
@@ -28,7 +28,7 @@ def get_balance_col(currency):
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template("index.html", bot_username=config.BOT_USERNAME)
 
 @app.route("/tonconnect-manifest.json")
 def manifest():
@@ -324,6 +324,11 @@ def api_crash_cashout():
             ON CONFLICT (currency) DO UPDATE SET total_paid = pool_state.total_paid + %s
         """, (bet["currency"], net_payout, net_payout))
 
+    try:
+        distribute_referral(user_id, bet["currency"], bet["amount"])
+    except Exception as e:
+        logger.error(f"referral distribution failed: {e}")
+
     notify_group(f"\U0001F7E2 Someone won {net_payout:.2f} {bet['currency']} at {multiplier:.2f}x!")
 
     return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
@@ -615,10 +620,18 @@ async def admin_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    existing = get_user(str(user.id))
+    is_new_user = existing is None
     get_or_create_user(
         user_id=str(user.id), username=user.username or "",
         first_name=user.first_name or "", last_name=user.last_name or "", photo_url=""
     )
+    if is_new_user and context.args:
+        ref_code = context.args[0].strip()
+        try:
+            place_in_binary_tree(str(user.id), ref_code)
+        except Exception as e:
+            logger.error(f"referral placement failed: {e}")
     if not is_group_member(str(user.id)):
         keyboard = [
             [InlineKeyboardButton("Join Group", url=config.FORCE_JOIN_INVITE_LINK)],

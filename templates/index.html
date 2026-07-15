@@ -328,9 +328,13 @@ html, body {
           <span style="font-size:13px;color:var(--text-muted);">Right Volume</span>
           <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-pink);" id="netRight">0 TRX</span>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;">
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
           <span style="font-size:13px;color:var(--text-muted);">Next Bonus</span>
-          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-yellow);">400 TRX</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-yellow);" id="nextBonusAmount">400 TRX</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;">
+          <span style="font-size:13px;color:var(--text-muted);">Bonus Cycles Earned</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;" id="cycleCount">0</span>
         </div>
       </div>
     </div>
@@ -468,6 +472,7 @@ html, body {
 </div>
 <script>
 const API_BASE = '';
+window.__BOT_USERNAME__ = '{{ bot_username }}';
 let tg = null, userId = null, username = '', firstName = 'User', photoUrl = '', initDataRaw = '';
 let currentTab = 'home', userData = {}, shopItems = [], crashCurrency = 'TRX', crashState = 'waiting';
 
@@ -530,6 +535,17 @@ function updateUI() {
   document.getElementById('walletTON').textContent = (userData.balance_ton || 0).toFixed(3).toLocaleString('en-US') + ' TON';
   document.getElementById('walletUSDT').textContent = (userData.balance_usdt || 0).toFixed(2) + ' USDT';
   if (photoUrl) document.getElementById('profileAvatar').innerHTML = `<img src="${photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+
+  const leftVol = userData.left_volume || 0;
+  const rightVol = userData.right_volume || 0;
+  const maxVol = Math.max(leftVol, rightVol, 1);
+  document.getElementById('leftVol').textContent = leftVol.toFixed(2) + ' TRX';
+  document.getElementById('rightVol').textContent = rightVol.toFixed(2) + ' TRX';
+  document.getElementById('leftFill').style.width = Math.min(100, (leftVol / maxVol) * 100) + '%';
+  document.getElementById('rightFill').style.width = Math.min(100, (rightVol / maxVol) * 100) + '%';
+  document.getElementById('netLeft').textContent = leftVol.toFixed(2) + ' TRX';
+  document.getElementById('netRight').textContent = rightVol.toFixed(2) + ' TRX';
+  document.getElementById('cycleCount').textContent = userData.cycle_count || 0;
 }
 
 function switchTab(tab) {
@@ -859,8 +875,16 @@ function copyRefCode() {
 
 function shareRef() {
   const code = userData.referral_code || '';
+  const botUsername = window.__BOT_USERNAME__ || '';
+  const deepLink = botUsername ? `https://t.me/${botUsername}?start=${encodeURIComponent(code)}` : '';
   const text = `Join TRX PRO and start mining! Use my code: ${code}`;
-  if (tg) tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(config.WEBAPP_URL)}&text=${encodeURIComponent(text)}`);
+  if (tg && deepLink) {
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent(text)}`);
+  } else if (deepLink) {
+    navigator.clipboard.writeText(deepLink).then(() => showToast('Referral link copied!', 'success'));
+  } else {
+    showToast('Referral link unavailable', 'error');
+  }
 }
 
 function closeWalletModal() {

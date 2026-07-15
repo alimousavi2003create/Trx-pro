@@ -82,3 +82,114 @@ def get_transactions(user_id: str, limit: int = 50) -> list:
             SELECT * FROM transactions WHERE user_id = %s ORDER BY created_at DESC LIMIT %s
         """, (user_id, limit))
         return [dict(row) for row in c.fetchall()]
+
+
+def get_user_by_referral_code(code: str):
+    with get_db_cursor() as c:
+        c.execute("SELECT * FROM users WHERE referral_code = %s", (code,))
+        row = c.fetchone()
+        return dict(row) if row else None
+
+
+def place_in_binary_tree(new_user_id: str, referrer_code: str) -> bool:
+    from collections import deque
+    referrer = get_user_by_referral_code(referrer_code)
+    if not referrer or referrer["user_id"] == new_user_id:
+        return False
+    with get_db_cursor() as c:
+        queue = deque([referrer["user_id"]])
+        while queue:
+            current_id = queue.popleft()
+            c.execute("SELECT user_id, left_child, right_child, tree_depth FROM users WHERE user_id = %s", (current_id,))
+            node = c.fetchone()
+            if not node:
+                continue
+            if not node["left_child"]:
+                c.execute("UPDATE users SET left_child = %s WHERE user_id = %s", (new_user_id, current_id))
+                c.execute("UPDATE users SET parent_id = %s, tree_depth = %s WHERE user_id = %s",
+                          (current_id, node["tree_depth"] + 1, new_user_id))
+                return True
+            if not node["right_child"]:
+                c.execute("UPDATE users SET right_child = %s WHERE user_id = %s", (new_user_id, current_id))
+                c.execute("UPDATE users SET parent_id = %s, tree_depth = %s WHERE user_id = %s",
+                          (current_id, node["tree_depth"] + 1, new_user_id))
+                return True
+            queue.append(node["left_child"])
+            queue.append(node["right_child"])
+    return False
+
+
+def check_binary_bonus(user_id: str):
+    from datetime import datetime, timezone, timedelta
+    with get_db_cursor() as c:
+        c.execute("SELECT left_volume, right_volume, last_bonus_at FROM users WHERE user_id = %s", (user_id,))
+        row = c.fetchone()
+        if not row:
+            return
+        matched = min(row["left_volume"] or 0, row["right_volume"] or 0)
+        if matched < config.BINARY_MATCH_VOLUME:
+            return
+        last_bonus = row["last_bonus_at"]
+        if last_bonus:
+            if last_bonus.tzinfo is None:
+                last_bonus = last_bonus.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - last_bonus < timedelta(days=config.REFERRAL_BONUS_COOLDOWN_DAYS):
+                return
+        c.execute("""
+            UPDATE users SET left_volume = left_volume - %s, right_volume = right_volume - %s,
+                balance_trx = balance_trx + %s, cycle_count = cycle_count + 1, last_bonus_at = NOW()
+            WHERE user_id = %s
+        """, (config.BINARY_MATCH_VOLUME, config.BINARY_MATCH_VOLUME, config.REFERRAL_BONUS_AMOUNT, user_id))
+        c.execute("""
+            INSERT INTO transactions (user_id, type, currency, amount, metadata)
+            VALUES (%s, 'binary_bonus', 'TRX', %s, %s)
+        """, (user_id, config.REFERRAL_BONUS_AMOUNT, json.dumps({"matched_volume": config.BINARY_MATCH_VOLUME})))
+
+
+def distribute_referral(user_id: str, currency: str, amount: float):
+    balance_col = {"TRX": "balance_trx", "TON": "balance_ton", "USDT": "balance_usdt"}.get(currency)
+    if not balance_col or amount <= 0:
+        return
+    with get_db_cursor() as c:
+        c.execute("SELECT user_id, parent_id, left_child, right_child FROM users WHERE user_id = %s", (user_id,))
+        current = c.fetchone()
+        if not current:
+            return
+        level = 1
+        while current and current["parent_id"] and level <= 20:
+            c.execute("SELECT user_id, parent_id, left_child, right_child FROM users WHERE user_id = %s", (current["parent_id"],))
+            parent = c.fetchone()
+            if not parent:
+                break
+            if currency == "TRX":
+                leg_col = "left_volume" if parent["left_child"] == current["user_id"] else "right_volume"
+                c.execute(f"UPDATE users SET {leg_col} = {leg_col} + %s WHERE user_id = %s", (amount, parent["user_id"]))
+            rate = config.REFERRAL_COMMISSION_RATES.get(level, 0)
+            if rate > 0:
+                commission = round(amount * (rate / 100), 6)
+                c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
+                          (commission, parent["user_id"]))
+                c.execute("""
+                    INSERT INTO referral_commissions (referrer_id, referred_id, level, amount, currency, is_paid, paid_at)
+                    VALUES (%s, %s, %s, %s, %s, TRUE, NOW())
+                """, (parent["user_id"], user_id, level, commission, currency))
+                c.execute("""
+                    INSERT INTO transactions (user_id, type, currency, amount, metadata)
+                    VALUES (%s, 'referral_commission', %s, %s, %s)
+                """, (parent["user_id"], currency, commission, json.dumps({"level": level, "from_user": user_id})))
+            current = parent
+            level += 1
+    if currency == "TRX":
+        node = user_id
+        with get_db_cursor() as c:
+            c.execute("SELECT parent_id FROM users WHERE user_id = %s", (node,))
+            row = c.fetchone()
+        ancestor = row["parent_id"] if row else None
+        depth_guard = 0
+        while ancestor and depth_guard < 20:
+            check_binary_bonus(ancestor)
+            with get_db_cursor() as c:
+                c.execute("SELECT parent_id FROM users WHERE user_id = %s", (ancestor,))
+                row = c.fetchone()
+            ancestor = row["parent_id"] if row else None
+            depth_guard += 1
