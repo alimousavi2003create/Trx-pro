@@ -44,6 +44,7 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT NOW(), last_active_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_usdt REAL DEFAULT 0")
         c.execute("""
             CREATE TABLE IF NOT EXISTS shop_items (
                 id SERIAL PRIMARY KEY, item_key TEXT UNIQUE NOT NULL,

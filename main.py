@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+def get_balance_col(currency):
+    return {"TRX": "balance_trx", "TON": "balance_ton", "USDT": "balance_usdt"}.get(currency, "balance_trx")
+
+
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -51,7 +55,7 @@ def api_auth_init():
         "user": {
             "user_id": user["user_id"], "username": user["username"],
             "first_name": user["first_name"], "balance_trx": user["balance_trx"],
-            "balance_ton": user["balance_ton"], "mining_power": user["mining_power"],
+            "balance_ton": user["balance_ton"], "balance_usdt": user.get("balance_usdt", 0), "mining_power": user["mining_power"],
             "energy": user["energy"], "energy_max": user["energy_max"],
             "level": user["level"], "xp": user["xp"], "xp_next": user["xp_next"],
             "referral_code": user["referral_code"],
@@ -69,7 +73,7 @@ def api_user(user_id):
         "user": {
             "user_id": user["user_id"], "username": user["username"],
             "first_name": user["first_name"], "balance_trx": user["balance_trx"],
-            "balance_ton": user["balance_ton"], "mining_power": user["mining_power"],
+            "balance_ton": user["balance_ton"], "balance_usdt": user.get("balance_usdt", 0), "mining_power": user["mining_power"],
             "energy": user["energy"], "energy_max": user["energy_max"],
             "level": user["level"], "xp": user["xp"], "xp_next": user["xp_next"],
             "referral_code": user["referral_code"],
@@ -156,7 +160,7 @@ def api_shop_buy():
         price = item["price_trx"] if currency == "TRX" else item["price_ton"]
         if not price or price <= 0:
             return jsonify({"success": False, "error": "Invalid price"}), 400
-        balance_col = "balance_trx" if currency == "TRX" else "balance_ton"
+        balance_col = get_balance_col(currency)
         c.execute(f"SELECT {balance_col} FROM users WHERE user_id = %s", (user_id,))
         bal = c.fetchone()[balance_col]
         if bal < price:
@@ -246,7 +250,7 @@ def api_crash_bet():
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
 
-    balance_col = "balance_trx" if currency == "TRX" else "balance_ton"
+    balance_col = get_balance_col(currency)
     if user[balance_col] < amount:
         return jsonify({"success": False, "error": "Insufficient balance"}), 400
 
@@ -296,7 +300,7 @@ def api_crash_cashout():
         profit = round(payout - bet["amount"], 4)
         fee = round(profit * (config.PROJECT_FEE_PERCENT / 100), 4) if profit > 0 else 0
         net_payout = round(payout - fee, 4)
-        balance_col = "balance_trx" if bet["currency"] == "TRX" else "balance_ton"
+        balance_col = get_balance_col(bet["currency"])
 
         c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
                    (net_payout, user_id))
@@ -342,7 +346,7 @@ def api_withdraw():
     user = get_user(user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
-    balance_col = "balance_trx" if currency == "TRX" else "balance_ton"
+    balance_col = get_balance_col(currency)
     if user[balance_col] < amount:
         return jsonify({"success": False, "error": "Insufficient balance"}), 400
 
@@ -438,7 +442,7 @@ async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not req:
             await update.message.reply_text("Request not found or already processed.")
             return
-        balance_col = "balance_trx" if req["currency"] == "TRX" else "balance_ton"
+        balance_col = get_balance_col(req["currency"])
         c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
                    (req["amount"], req["user_id"]))
         c.execute("UPDATE withdrawal_requests SET status = 'rejected', processed_at = NOW() WHERE id = %s", (wid,))
@@ -472,7 +476,7 @@ async def admin_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         await update.message.reply_text("User not found.")
         return
-    balance_col = "balance_trx" if currency == "TRX" else "balance_ton"
+    balance_col = get_balance_col(currency)
     with get_db_cursor() as c:
         c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
                    (amount, target_user_id))
