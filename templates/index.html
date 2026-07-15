@@ -374,6 +374,48 @@ html, body {
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">Recent Transactions</div>
       </div>
     </div>
+
+    <!-- TAB: Admin -->
+    <div id="tab-admin" class="tab-content hidden">
+      <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom:16px;">
+        <div class="stat-card">
+          <div class="stat-value" id="adminTotalUsers">0</div>
+          <div class="stat-label">Total Users</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="adminPendingCount">0</div>
+          <div class="stat-label">Pending Withdrawals</div>
+        </div>
+      </div>
+
+      <div class="wallet-card">
+        <div class="wallet-header"><span class="wallet-title">Pool State</span></div>
+        <div id="adminPoolList" style="font-size:12px;"></div>
+      </div>
+
+      <div class="wallet-card">
+        <div class="wallet-header"><span class="wallet-title">Manual Credit</span></div>
+        <input type="text" id="adminCreditUserId" placeholder="User ID" style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid #333;color:#fff;margin-bottom:8px;">
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <select id="adminCreditCurrency" style="flex:1;padding:10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid #333;color:#fff;">
+            <option value="TRX">TRX</option>
+            <option value="TON">TON</option>
+            <option value="USDT">USDT</option>
+          </select>
+          <input type="text" id="adminCreditAmount" placeholder="Amount" inputmode="decimal" style="flex:1;padding:10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid #333;color:#fff;">
+        </div>
+        <button class="wallet-btn" style="width:100%;" onclick="adminSubmitCredit()">Credit User</button>
+      </div>
+
+      <div class="wallet-card">
+        <div class="wallet-header"><span class="wallet-title">Pending Withdrawals</span></div>
+        <div id="adminWithdrawalsList"></div>
+      </div>
+
+      <div class="wallet-card">
+        <button class="wallet-btn" style="width:100%;color:var(--neon-pink);" onclick="adminResetPool()">Reset Pool (all currencies)</button>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -405,6 +447,10 @@ html, body {
     <div class="tab-item" onclick="switchTab('profile')">
       <span class="tab-icon">👤</span>
       <span>Profile</span>
+    </div>
+    <div class="tab-item hidden" id="adminTabBtn" onclick="switchTab('admin')">
+      <span class="tab-icon">🛠️</span>
+      <span>Admin</span>
     </div>
   </div>
 </div>
@@ -469,6 +515,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
   document.getElementById('tab-' + tab).classList.remove('hidden');
   if (tab === 'crash') { startCrashPolling(); } else { stopCrashPolling(); }
+  if (tab === 'admin') { loadAdminDashboard(); }
   document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
   event.currentTarget.classList.add('active');
 }
@@ -871,7 +918,104 @@ function showToast(msg, type = '') {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+let isAdmin = false;
+
+async function checkAdminStatus() {
+  try {
+    const r = await fetch(API_BASE + '/api/admin/check?user_id=' + encodeURIComponent(userId));
+    const d = await r.json();
+    if (d.success && d.is_admin) {
+      isAdmin = true;
+      document.getElementById('adminTabBtn').classList.remove('hidden');
+    }
+  } catch (e) { console.error('admin check failed', e); }
+}
+
+async function loadAdminDashboard() {
+  if (!isAdmin) return;
+  try {
+    const r = await fetch(API_BASE + '/api/admin/dashboard?admin_id=' + encodeURIComponent(userId));
+    const d = await r.json();
+    if (!d.success) { showToast(d.error || 'Admin load failed', 'error'); return; }
+    document.getElementById('adminTotalUsers').textContent = d.total_users;
+    document.getElementById('adminPendingCount').textContent = d.pending_withdrawals.length;
+
+    document.getElementById('adminPoolList').innerHTML = (d.pool || []).map(p => `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border);">
+        <span>${p.currency}</span>
+        <span>collected: ${(p.total_collected||0).toFixed(2)} / paid: ${(p.total_paid||0).toFixed(2)}</span>
+      </div>`).join('') || '<div style="color:var(--text-muted);">No data</div>';
+
+    document.getElementById('adminWithdrawalsList').innerHTML = (d.pending_withdrawals || []).map(w => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--glass-border);">
+        <div style="font-size:12px;margin-bottom:6px;">#${w.id} · user ${w.user_id} · ${w.amount} ${w.currency}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;word-break:break-all;">to: ${w.destination_address}</div>
+        <div style="display:flex;gap:8px;">
+          <button class="wallet-btn" style="flex:1;" onclick="adminApproveWithdrawal(${w.id})">Approve</button>
+          <button class="wallet-btn" style="flex:1;color:var(--neon-pink);" onclick="adminRejectWithdrawal(${w.id})">Reject</button>
+        </div>
+      </div>`).join('') || '<div style="color:var(--text-muted);">No pending withdrawals</div>';
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function adminApproveWithdrawal(wid) {
+  try {
+    const r = await fetch(API_BASE + '/api/admin/withdraw/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_id: userId, withdrawal_id: wid })
+    });
+    const d = await r.json();
+    showToast(d.message || d.error, d.success ? 'success' : 'error');
+    if (d.success) loadAdminDashboard();
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function adminRejectWithdrawal(wid) {
+  try {
+    const r = await fetch(API_BASE + '/api/admin/withdraw/reject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_id: userId, withdrawal_id: wid })
+    });
+    const d = await r.json();
+    showToast(d.message || d.error, d.success ? 'success' : 'error');
+    if (d.success) loadAdminDashboard();
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function adminSubmitCredit() {
+  const targetUserId = document.getElementById('adminCreditUserId').value.trim();
+  const currency = document.getElementById('adminCreditCurrency').value;
+  const amount = parseFloat(document.getElementById('adminCreditAmount').value);
+  if (!targetUserId || !amount || amount <= 0) { showToast('Fill in user ID and a valid amount', 'error'); return; }
+  try {
+    const r = await fetch(API_BASE + '/api/admin/credit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_id: userId, target_user_id: targetUserId, currency, amount })
+    });
+    const d = await r.json();
+    showToast(d.message || d.error, d.success ? 'success' : 'error');
+    if (d.success) {
+      document.getElementById('adminCreditUserId').value = '';
+      document.getElementById('adminCreditAmount').value = '';
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function adminResetPool() {
+  if (!confirm('Reset pool state for ALL currencies? This cannot be undone.')) return;
+  try {
+    const r = await fetch(API_BASE + '/api/admin/resetpool', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_id: userId })
+    });
+    const d = await r.json();
+    showToast(d.message || d.error, d.success ? 'success' : 'error');
+    if (d.success) loadAdminDashboard();
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
 initAuth();
+checkAdminStatus();
 </script>
 </body>
 </html>
