@@ -15,6 +15,7 @@ from database import init_db, get_db_cursor
 from auth import verify_init_data
 from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions
 from crash_engine import start_crash_engine, get_public_state, notify_group
+from deposit_monitor import start_deposit_monitor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -322,6 +323,18 @@ def api_crash_cashout():
 
     return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
 
+@app.route("/api/deposit_info")
+def api_deposit_info():
+    return jsonify({
+        "success": True,
+        "wallets": {
+            "TRX": config.PROJECT_WALLET_TRX,
+            "TON": config.PROJECT_WALLET_TON,
+            "USDT": config.PROJECT_WALLET_USDT,
+        }
+    })
+
+
 @app.route("/api/withdraw", methods=["POST"])
 def api_withdraw():
     data = request.json
@@ -526,6 +539,7 @@ async def run_bot():
 if __name__ == "__main__":
     init_db()
     start_crash_engine()
+    start_deposit_monitor()
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     asyncio.run(run_bot())

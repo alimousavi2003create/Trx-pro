@@ -107,6 +107,15 @@ def init_db():
             )
         """)
         c.execute("""
+            CREATE TABLE IF NOT EXISTS processed_deposits (
+                tx_hash TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                amount REAL NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        c.execute("""
             CREATE TABLE IF NOT EXISTS pool_state (
                 currency TEXT PRIMARY KEY,
                 total_collected REAL DEFAULT 0,

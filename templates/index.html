@@ -338,8 +338,8 @@ html, body {
         </div>
         <div class="wallet-amount" id="walletTRX">0 TRX</div>
         <div class="wallet-actions">
-          <button class="wallet-btn" onclick="depositTRX()">Deposit</button>
-          <button class="wallet-btn" onclick="withdrawTRX()">Withdraw</button>
+          <button class="wallet-btn" onclick="openDepositModal('TRX')">Deposit</button>
+          <button class="wallet-btn" onclick="openWithdrawModal('TRX')">Withdraw</button>
         </div>
       </div>
       <div class="wallet-card">
@@ -348,8 +348,8 @@ html, body {
         </div>
         <div class="wallet-amount" id="walletTON">0 TON</div>
         <div class="wallet-actions">
-          <button class="wallet-btn" onclick="depositTRX()">Deposit</button>
-          <button class="wallet-btn" onclick="withdrawTRX()">Withdraw</button>
+          <button class="wallet-btn" onclick="openDepositModal('TON')">Deposit</button>
+          <button class="wallet-btn" onclick="openWithdrawModal('TON')">Withdraw</button>
         </div>
       </div>
       <div class="wallet-card">
@@ -358,8 +358,8 @@ html, body {
         </div>
         <div class="wallet-amount" id="walletUSDT">0 USDT</div>
         <div class="wallet-actions">
-          <button class="wallet-btn" onclick="depositTRX()">Deposit</button>
-          <button class="wallet-btn" onclick="withdrawTRX()">Withdraw</button>
+          <button class="wallet-btn" onclick="openDepositModal('USDT')">Deposit</button>
+          <button class="wallet-btn" onclick="openWithdrawModal('USDT')">Withdraw</button>
         </div>
       </div>
       <div class="wallet-card">
@@ -377,6 +377,13 @@ html, body {
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div id="walletModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#12101f; border:1px solid #333; border-radius:16px; padding:20px; width:88%; max-width:360px;">
+      <div id="walletModalContent"></div>
+      <button onclick="closeWalletModal()" style="margin-top:14px; width:100%; padding:10px; border-radius:10px; background:rgba(255,255,255,0.08); color:#fff; border:none;">Close</button>
+    </div>
+  </div>
 
   <div class="tabbar">
     <div class="tab-item active" onclick="switchTab('home')">
@@ -787,8 +794,64 @@ function shareRef() {
   if (tg) tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(config.WEBAPP_URL)}&text=${encodeURIComponent(text)}`);
 }
 
-function depositTRX() { showToast('Deposit: Send TRX to project wallet (coming soon)', 'success'); }
-function withdrawTRX() { showToast('Withdrawal: Minimum 100 TRX (coming soon)', 'success'); }
+function closeWalletModal() {
+  document.getElementById('walletModalOverlay').style.display = 'none';
+}
+
+async function openDepositModal(currency) {
+  try {
+    const r = await fetch(API_BASE + '/api/deposit_info');
+    const d = await r.json();
+    const address = (d.wallets && d.wallets[currency]) || 'Not configured yet - contact admin';
+    document.getElementById('walletModalContent').innerHTML = `
+      <div style="font-size:14px; color:#9aa0b8; margin-bottom:10px;">Deposit ${currency}</div>
+      <div style="font-size:12px; color:#9aa0b8; margin-bottom:6px;">Send ${currency} to this address:</div>
+      <div style="background:rgba(255,255,255,0.06); padding:10px; border-radius:8px; font-size:12px; word-break:break-all; margin-bottom:10px;">${address}</div>
+      <div style="font-size:12px; color:#9aa0b8; margin-bottom:6px;">Include this memo/reference:</div>
+      <div style="background:rgba(255,255,255,0.06); padding:10px; border-radius:8px; font-size:13px; font-weight:700;">${userId}</div>
+      <div style="font-size:11px; color:#9aa0b8; margin-top:10px;">After sending, your balance will be credited by an admin once the transaction is confirmed.</div>
+    `;
+    document.getElementById('walletModalOverlay').style.display = 'flex';
+  } catch (e) { showToast('Failed to load deposit info', 'error'); }
+}
+
+function openWithdrawModal(currency) {
+  document.getElementById('walletModalContent').innerHTML = `
+    <div style="font-size:14px; color:#9aa0b8; margin-bottom:10px;">Withdraw ${currency}</div>
+    <input type="text" id="withdrawAmountInput" placeholder="Amount" inputmode="decimal" style="width:100%; box-sizing:border-box; padding:10px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid #333; color:#fff; margin-bottom:10px;">
+    <input type="text" id="withdrawAddressInput" placeholder="Destination address" style="width:100%; box-sizing:border-box; padding:10px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid #333; color:#fff; margin-bottom:10px;">
+    <button onclick="submitWithdrawRequest('${currency}')" style="width:100%; padding:12px; border-radius:10px; background:linear-gradient(90deg,#3df2d4,#8b5cf6); color:#000; font-weight:700; border:none;">Submit Request</button>
+  `;
+  document.getElementById('walletModalOverlay').style.display = 'flex';
+}
+
+async function submitWithdrawRequest(currency) {
+  const amount = parseFloat(document.getElementById('withdrawAmountInput').value);
+  const destination = document.getElementById('withdrawAddressInput').value.trim();
+  if (!amount || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+  if (!destination) { showToast('Enter a destination address', 'error'); return; }
+  try {
+    const r = await fetch(API_BASE + '/api/withdraw', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, init_data: initDataRaw, currency, amount, destination_address: destination })
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Withdrawal request submitted for admin review', 'success');
+      closeWalletModal();
+      try {
+        const ur = await fetch(API_BASE + '/api/user/' + userId);
+        const ud = await ur.json();
+        if (ud.success) { userData = ud.user; updateUI(); }
+      } catch (e) {}
+    } else {
+      showToast(d.error || 'Withdrawal failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+function depositTRX() { openDepositModal('TRX'); }
+function withdrawTRX() { openWithdrawModal('TRX'); }
 
 async function loadTransactions() {
   try {
