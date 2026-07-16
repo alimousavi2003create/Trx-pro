@@ -103,6 +103,18 @@ def api_tap():
         return jsonify({"success": False, "error": "User not found"}), 404
     if user["energy"] <= 0:
         return jsonify({"success": False, "error": "No energy left"}), 400
+    from datetime import datetime, timezone, timedelta
+    reset_at = user.get("tap_count_reset_at")
+    needs_reset = True
+    if reset_at:
+        if reset_at.tzinfo is None:
+            reset_at = reset_at.replace(tzinfo=timezone.utc)
+        needs_reset = (datetime.now(timezone.utc) - reset_at) >= timedelta(hours=24)
+    if needs_reset:
+        with get_db_cursor() as c:
+            c.execute("UPDATE users SET tap_count_today = 0, tap_count_reset_at = NOW() WHERE user_id = %s",
+                      (user_id,))
+        user["tap_count_today"] = 0
     if user["tap_count_today"] >= config.TAP_DAILY_LIMIT:
         return jsonify({"success": False, "error": "Daily tap limit reached"}), 400
     reward = config.TAP_BASE_REWARD * user["mining_power"]
