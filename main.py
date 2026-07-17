@@ -617,6 +617,10 @@ def api_nft_list():
     ok = set_nft_listing(nft_id, user_id, price, currency, is_listed)
     if not ok:
         return jsonify({"success": False, "error": "NFT not found or not owned by you"}), 403
+    if is_listed:
+        nft_info = get_nft(nft_id)
+        nft_name = nft_info["name"] if nft_info else "an NFT"
+        notify_group(f"\U0001F5BC New NFT listed: {nft_name} for {price} {currency}!")
     return jsonify({"success": True, "message": "Listing updated"})
 
 
@@ -639,9 +643,12 @@ def api_nft_buy():
     nft_id = data.get("nft_id")
     if not buyer_id or not nft_id:
         return jsonify({"success": False, "error": "Missing parameters"}), 400
+    nft_before = get_nft(nft_id)
     result = transfer_nft(nft_id, buyer_id)
     if not result["success"]:
         return jsonify(result), 400
+    if nft_before:
+        notify_group(f"\U0001F91D NFT \"{nft_before['name']}\" sold for {nft_before['price']} {nft_before['currency']}!")
     return jsonify(result)
 
 
@@ -804,6 +811,63 @@ async def admin_forgetuser(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"User {target_id} fully deleted. They will be treated as brand new on next /start.")
 
 
+async def admin_mentionbatch(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    count = 500
+    if context.args:
+        try:
+            count = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("Usage: /mentionbatch <count> (default 500)")
+            return
+    with get_db_cursor() as c:
+        c.execute("""
+            SELECT user_id, username, first_name FROM users
+            ORDER BY last_mentioned_at ASC NULLS FIRST
+            LIMIT %s
+        """, (count,))
+        rows = c.fetchall()
+    if not rows:
+        await update.message.reply_text("No users found.")
+        return
+
+    mentions = []
+    for row in rows:
+        name = (row["first_name"] or "User").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        mentions.append(f'<a href="tg://user?id={row["user_id"]}">{name}</a>')
+
+    chunks = []
+    current_chunk = "New update on TRX PRO! Check it out:\n\n"
+    for mention in mentions:
+        if len(current_chunk) + len(mention) + 2 > 3500:
+            chunks.append(current_chunk)
+            current_chunk = ""
+        current_chunk += mention + " "
+    if current_chunk.strip():
+        chunks.append(current_chunk)
+
+    from crash_engine import GROUP_CHAT_ID
+    import requests as req_lib
+    sent_count = 0
+    for chunk in chunks:
+        try:
+            req_lib.post(
+                f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
+                json={"chat_id": GROUP_CHAT_ID, "text": chunk, "parse_mode": "HTML"},
+                timeout=10,
+            )
+            sent_count += 1
+        except Exception as e:
+            logger.error(f"mentionbatch send failed: {e}")
+
+    user_ids = [row["user_id"] for row in rows]
+    with get_db_cursor() as c:
+        c.execute("UPDATE users SET last_mentioned_at = NOW() WHERE user_id = ANY(%s)", (user_ids,))
+
+    await update.message.reply_text(f"Mentioned {len(rows)} users across {sent_count} message(s).")
+
+
 async def admin_resetpool(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -920,6 +984,7 @@ async def run_bot():
     app_bot.add_handler(CommandHandler("resetpool", admin_resetpool))
     app_bot.add_handler(CommandHandler("forgetuser", admin_forgetuser))
     app_bot.add_handler(CallbackQueryHandler(check_join_callback, pattern="^check_join$"))
+    app_bot.add_handler(CommandHandler("mentionbatch", admin_mentionbatch))
     await app_bot.initialize()
     await app_bot.start()
     await app_bot.updater.start_polling()
