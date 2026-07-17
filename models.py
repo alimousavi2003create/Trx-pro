@@ -341,37 +341,6 @@ def transfer_nft(nft_id: int, buyer_id: str):
     return {"success": True, "buyer_paid": buyer_pays, "seller_received": seller_gets, "currency": currency}
 
 
-def charge_nft_mint_fee(user_id: str, currency: str):
-    fee_map = {"TRX": config.NFT_MINT_FEE_TRX, "TON": config.NFT_MINT_FEE_TON, "USDT": config.NFT_MINT_FEE_USDT}
-    balance_cols = {"TRX": "balance_trx", "TON": "balance_ton", "USDT": "balance_usdt"}
-    fee = fee_map.get(currency)
-    balance_col = balance_cols.get(currency)
-    if fee is None or not balance_col:
-        return {"success": False, "error": "Invalid currency"}
-    with get_db_cursor() as c:
-        c.execute(f"SELECT {balance_col} as bal FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
-        row = c.fetchone()
-        if not row or row["bal"] < fee:
-            return {"success": False, "error": "Insufficient balance for mint fee"}
-        c.execute(f"UPDATE users SET {balance_col} = {balance_col} - %s WHERE user_id = %s", (fee, user_id))
-        c.execute("""
-            INSERT INTO transactions (user_id, type, currency, amount, metadata)
-            VALUES (%s, 'nft_mint_fee', %s, %s, %s)
-        """, (user_id, currency, -fee, json.dumps({})))
-    return {"success": True, "fee_charged": fee, "currency": currency}
-
-
-def create_nft(owner_id: str, name: str, image_data: str):
-    with get_db_cursor() as c:
-        c.execute("""
-            INSERT INTO nfts (owner_id, creator_id, name, image_data, is_listed)
-            VALUES (%s, %s, %s, %s, FALSE)
-            RETURNING id, owner_id, creator_id, name, price, currency, is_listed, created_at
-        """, (owner_id, owner_id, name, image_data))
-        row = c.fetchone()
-        return dict(row) if row else None
-
-
 def get_nft(nft_id: int):
     with get_db_cursor() as c:
         c.execute("SELECT * FROM nfts WHERE id = %s", (nft_id,))
