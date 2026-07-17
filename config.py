@@ -58,4 +58,4 @@ NFT_MINT_FEE_TON = float(os.environ.get("NFT_MINT_FEE_TON", "2.05"))
 NFT_MARKETPLACE_BUYER_FEE_PERCENT = float(os.environ.get("NFT_MARKETPLACE_BUYER_FEE_PERCENT", "5"))
 NFT_MARKETPLACE_SELLER_FEE_PERCENT = float(os.environ.get("NFT_MARKETPLACE_SELLER_FEE_PERCENT", "5"))
 
-NFT_MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB limit for base64 image uploads
+NFT_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB limit for base64 image uploads
