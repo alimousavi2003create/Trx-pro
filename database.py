@@ -45,12 +45,6 @@ def init_db():
         c.execute("""
             ALTER TABLE nfts ADD COLUMN IF NOT EXISTS mint_fee_currency TEXT
         """)
-        c.execute("""
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS left_commission_trx NUMERIC DEFAULT 0
-        """)
-        c.execute("""
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS right_commission_trx NUMERIC DEFAULT 0
-        """)
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (
