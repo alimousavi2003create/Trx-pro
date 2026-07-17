@@ -735,6 +735,28 @@ async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Withdrawal #{wid} rejected and refunded.")
 
 
+async def admin_forgetuser(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(str(update.effective_user.id)):
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /forgetuser <user_id>")
+        return
+    target_id = context.args[0].strip()
+    with get_db_cursor() as c:
+        c.execute("SELECT user_id FROM users WHERE user_id = %s", (target_id,))
+        if not c.fetchone():
+            await update.message.reply_text(f"User {target_id} not found.")
+            return
+        c.execute("UPDATE users SET parent_id = NULL, left_child = NULL, right_child = NULL WHERE parent_id = %s OR left_child = %s OR right_child = %s",
+                   (target_id, target_id, target_id))
+        c.execute("DELETE FROM nfts WHERE owner_id = %s OR creator_id = %s", (target_id, target_id))
+        c.execute("DELETE FROM transactions WHERE user_id = %s", (target_id,))
+        c.execute("DELETE FROM referral_commissions WHERE referrer_id = %s OR referred_id = %s", (target_id, target_id))
+        c.execute("DELETE FROM withdrawal_requests WHERE user_id = %s", (target_id,))
+        c.execute("DELETE FROM users WHERE user_id = %s", (target_id,))
+    await update.message.reply_text(f"User {target_id} fully deleted. They will be treated as brand new on next /start.")
+
+
 async def admin_resetpool(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -849,6 +871,7 @@ async def run_bot():
     app_bot.add_handler(CommandHandler("reject", admin_reject))
     app_bot.add_handler(CommandHandler("credit", admin_credit))
     app_bot.add_handler(CommandHandler("resetpool", admin_resetpool))
+    app_bot.add_handler(CommandHandler("forgetuser", admin_forgetuser))
     app_bot.add_handler(CallbackQueryHandler(check_join_callback, pattern="^check_join$"))
     await app_bot.initialize()
     await app_bot.start()
