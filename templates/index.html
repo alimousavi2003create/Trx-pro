@@ -1171,7 +1171,7 @@ async function mintNftWithImage(imageData) {
       document.getElementById('nftNameInput').value = '';
       nftSelectedImageData = null;
       document.getElementById('nftImagePreviewBox').innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Tap to choose image</span>';
-      fetchUserData();
+      if (typeof fetchUserData === 'function') fetchUserData();
       switchNftView('mine');
     } else {
       showToast(d.error || 'Mint failed', 'error');
@@ -1252,6 +1252,7 @@ async function loadMyNfts() {
               <button class="ref-btn" style="flex:1;font-size:11px;padding:6px;" onclick="promptListNft(${n.id})">${n.is_listed ? 'Edit Price' : 'List for Sale'}</button>
               ${n.is_listed ? `<button class="ref-btn" style="flex:1;font-size:11px;padding:6px;" onclick="unlistNft(${n.id})">Unlist</button>` : ''}
             </div>
+            <button class="ref-btn" style="width:100%;font-size:11px;padding:6px;margin-top:6px;color:var(--neon-pink);" onclick="deleteNft(${n.id})">Delete NFT</button>
           </div>
         </div>
       </div>`).join('');
@@ -1291,6 +1292,26 @@ async function unlistNft(nftId) {
   } catch (e) { showToast('Network error', 'error'); }
 }
 
+async function deleteNft(nftId) {
+  if (!confirm('Delete this NFT permanently? If a mint fee was paid, it will be refunded to your balance.')) return;
+  try {
+    const r = await fetch(API_BASE + '/api/nft/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, nft_id: nftId })
+    });
+    const d = await r.json();
+    if (d.success) {
+      let msg = 'NFT deleted';
+      if (d.refunded_amount) msg += ` — refunded ${d.refunded_amount} ${d.refunded_currency}`;
+      showToast(msg, 'success');
+      if (typeof fetchUserData === 'function') fetchUserData();
+      loadMyNfts();
+    } else {
+      showToast(d.error || 'Delete failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
 async function loadMarket() {
   try {
     const r = await fetch(API_BASE + '/api/nft/market');
@@ -1325,7 +1346,7 @@ async function buyNft(nftId) {
     const d = await r.json();
     if (d.success) {
       showToast(`Bought! Paid ${d.buyer_paid} ${d.currency}`, 'success');
-      fetchUserData();
+      if (typeof fetchUserData === 'function') fetchUserData();
       loadMarket();
     } else {
       showToast(d.error || 'Purchase failed', 'error');

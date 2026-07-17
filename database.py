@@ -39,6 +39,12 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        c.execute("""
+            ALTER TABLE nfts ADD COLUMN IF NOT EXISTS mint_fee_amount NUMERIC
+        """)
+        c.execute("""
+            ALTER TABLE nfts ADD COLUMN IF NOT EXISTS mint_fee_currency TEXT
+        """)
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (

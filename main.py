@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 import config
 from database import init_db, get_db_cursor
 from auth import verify_init_data, is_group_member
-from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee
+from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft
 from crash_engine import start_crash_engine, get_public_state, notify_group
 from deposit_monitor import start_deposit_monitor
 
@@ -563,7 +563,7 @@ def api_nft_mint():
         logger.info(f"NFT_MINT_DEBUG rejected: fee charge failed - {fee_result['error']}")
         return jsonify({"success": False, "error": fee_result["error"]}), 400
 
-    nft = create_nft(user_id, name, image_data)
+    nft = create_nft(user_id, name, image_data, fee_result["fee_charged"], currency)
     return jsonify({"success": True, "nft": nft, "fee_charged": fee_result["fee_charged"], "currency": currency})
 
 
@@ -636,6 +636,19 @@ def api_nft_buy():
     result = transfer_nft(nft_id, buyer_id)
     if not result["success"]:
         return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/nft/delete", methods=["POST"])
+def api_nft_delete():
+    data = request.json
+    user_id = str(data.get("user_id", ""))
+    nft_id = data.get("nft_id")
+    if not user_id or not nft_id:
+        return jsonify({"success": False, "error": "Missing parameters"}), 400
+    result = delete_nft(nft_id, user_id)
+    if not result["success"]:
+        return jsonify(result), 403
     return jsonify(result)
 
 
