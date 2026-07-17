@@ -1181,12 +1181,23 @@ async function handleNftImageSelect(event) {
       compressed = await compressImageFile(file, 600, 0.6);
     }
     nftSelectedImageData = compressed;
-    document.getElementById('nftImagePreviewBox').innerHTML =
-      `<img src="${nftSelectedImageData}" style="width:100%;height:100%;object-fit:cover;">`;
   } catch (e) {
-    showToast('Failed to process image, try another one', 'error');
-    document.getElementById('nftImagePreviewBox').innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Tap to choose image</span>';
+    console.error('Compression failed, using raw image', e);
+    try {
+      nftSelectedImageData = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    } catch (e2) {
+      showToast('Failed to load image, try another one', 'error');
+      document.getElementById('nftImagePreviewBox').innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Tap to choose image</span>';
+      return;
+    }
   }
+  document.getElementById('nftImagePreviewBox').innerHTML =
+    `<img src="${nftSelectedImageData}" style="width:100%;height:100%;object-fit:cover;">`;
 }
 
 async function mintNftWithImage(imageData) {
