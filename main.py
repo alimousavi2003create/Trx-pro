@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 import config
 from database import init_db, get_db_cursor
 from auth import verify_init_data, is_group_member
-from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft
+from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft, pay_direct_referral_bonus, get_downline_count
 from crash_engine import start_crash_engine, get_public_state, notify_group
 from deposit_monitor import start_deposit_monitor
 
@@ -133,6 +133,11 @@ def api_tap():
                 UPDATE users SET level = %s, xp = 0, xp_next = %s, mining_power = mining_power + 0.5
                 WHERE user_id = %s
             """, (new_level, new_xp_next, user_id))
+
+    try:
+        pay_direct_referral_bonus(user_id, "TRX", reward, "tap")
+    except Exception as e:
+        logger.error(f"tap referral bonus failed: {e}")
             level_bonus = 50
             c.execute("UPDATE users SET balance_trx = balance_trx + %s WHERE user_id = %s",
                       (level_bonus, user_id))
@@ -650,6 +655,23 @@ def api_nft_delete():
     if not result["success"]:
         return jsonify(result), 403
     return jsonify(result)
+
+
+@app.route("/api/referral/stats")
+def api_referral_stats():
+    user_id = request.args.get("user_id", "")
+    if not user_id:
+        return jsonify({"success": False, "error": "user_id required"}), 400
+    user = get_user(user_id)
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+    downline_count = get_downline_count(user_id)
+    return jsonify({
+        "success": True,
+        "downline_count": downline_count,
+        "left_commission_trx": float(user.get("left_commission_trx") or 0),
+        "right_commission_trx": float(user.get("right_commission_trx") or 0),
+    })
 
 
 def is_admin(telegram_user_id):
