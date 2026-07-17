@@ -340,9 +340,21 @@ html, body {
           <span style="font-size:13px;color:var(--text-muted);">Next Bonus</span>
           <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-yellow);" id="nextBonusAmount">400 TRX</span>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;">
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
           <span style="font-size:13px;color:var(--text-muted);">Bonus Cycles Earned</span>
           <span style="font-family:'Orbitron',sans-serif;font-size:14px;" id="cycleCount">0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
+          <span style="font-size:13px;color:var(--text-muted);">Total Downline</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;" id="downlineCount">0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
+          <span style="font-size:13px;color:var(--text-muted);">Left Commission</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-cyan);" id="leftCommission">0 TRX</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;">
+          <span style="font-size:13px;color:var(--text-muted);">Right Commission</span>
+          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-pink);" id="rightCommission">0 TRX</span>
         </div>
       </div>
     </div>
@@ -607,6 +619,7 @@ function switchTab(tab) {
   if (tab === 'crash') { startCrashPolling(); } else { stopCrashPolling(); }
   if (tab === 'admin') { loadAdminDashboard(); }
   if (tab === 'nft') { switchNftView('mint'); }
+  if (tab === 'referral') { loadReferralStats(); }
   document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
   event.currentTarget.classList.add('active');
 }
@@ -1396,6 +1409,17 @@ async function buyNft(nftId) {
       showToast(d.error || 'Purchase failed', 'error');
     }
   } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function loadReferralStats() {
+  try {
+    const r = await fetch(API_BASE + '/api/referral/stats?user_id=' + encodeURIComponent(userId));
+    const d = await r.json();
+    if (!d.success) return;
+    document.getElementById('downlineCount').textContent = d.downline_count;
+    document.getElementById('leftCommission').textContent = d.left_commission_trx.toFixed(2) + ' TRX';
+    document.getElementById('rightCommission').textContent = d.right_commission_trx.toFixed(2) + ' TRX';
+  } catch (e) {}
 }
 
 initAuth();
