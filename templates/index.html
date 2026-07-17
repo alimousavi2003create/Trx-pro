@@ -581,8 +581,8 @@ function updateUI() {
   document.getElementById('rightVol').textContent = rightVol.toFixed(2) + ' TRX';
   document.getElementById('leftFill').style.width = Math.min(100, (leftVol / maxVol) * 100) + '%';
   document.getElementById('rightFill').style.width = Math.min(100, (rightVol / maxVol) * 100) + '%';
-  document.getElementById('netLeft').textContent = leftVol.toFixed(2) + ' TRX';
-  document.getElementById('netRight').textContent = rightVol.toFixed(2) + ' TRX';
+  const netLeftEl = document.getElementById('netLeft'); if (netLeftEl) netLeftEl.textContent = leftVol.toFixed(2) + ' TRX';
+  const netRightEl = document.getElementById('netRight'); if (netRightEl) netRightEl.textContent = rightVol.toFixed(2) + ' TRX';
   document.getElementById('cycleCount').textContent = userData.cycle_count || 0;
 }
 
