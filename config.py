@@ -49,3 +49,13 @@ FORCE_JOIN_INVITE_LINK = os.environ.get("FORCE_JOIN_INVITE_LINK", "https://t.me/
 
 BINARY_MATCH_VOLUME = float(os.environ.get("BINARY_MATCH_VOLUME", "1000"))
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
+
+# ---- NFT Marketplace settings ----
+NFT_MINT_FEE_USDT = float(os.environ.get("NFT_MINT_FEE_USDT", "10"))
+NFT_MINT_FEE_TRX = float(os.environ.get("NFT_MINT_FEE_TRX", "111"))
+NFT_MINT_FEE_TON = float(os.environ.get("NFT_MINT_FEE_TON", "2.05"))
+
+NFT_MARKETPLACE_BUYER_FEE_PERCENT = float(os.environ.get("NFT_MARKETPLACE_BUYER_FEE_PERCENT", "5"))
+NFT_MARKETPLACE_SELLER_FEE_PERCENT = float(os.environ.get("NFT_MARKETPLACE_SELLER_FEE_PERCENT", "5"))
+
+NFT_MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB limit for base64 image uploads

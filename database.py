@@ -26,6 +26,21 @@ def get_db_cursor():
 def init_db():
     with get_db_cursor() as c:
         c.execute("""
+            CREATE TABLE IF NOT EXISTS nfts (
+                id SERIAL PRIMARY KEY,
+                owner_id TEXT NOT NULL,
+                creator_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                image_data TEXT NOT NULL,
+                price NUMERIC,
+                currency TEXT,
+                is_listed BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        c.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id TEXT PRIMARY KEY, username TEXT, first_name TEXT,
                 last_name TEXT, photo_url TEXT, wallet_trx TEXT, wallet_ton TEXT,
