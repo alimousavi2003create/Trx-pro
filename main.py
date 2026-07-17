@@ -529,23 +529,32 @@ def api_nft_mint():
     currency = str(data.get("currency", "")).upper()
     image_data = data.get("image_data", "")
 
+    logger.info(f"NFT_MINT_DEBUG user_id={user_id} name_len={len(name)} currency={currency} image_len={len(image_data) if image_data else 0} image_prefix={image_data[:30] if image_data else None}")
+
     if not user_id or not name:
+        logger.info("NFT_MINT_DEBUG rejected: missing name/user_id")
         return jsonify({"success": False, "error": "Name is required"}), 400
     if len(name) > 40:
+        logger.info("NFT_MINT_DEBUG rejected: name too long")
         return jsonify({"success": False, "error": "Name too long (max 40 chars)"}), 400
     if currency not in ("TRX", "TON", "USDT"):
+        logger.info(f"NFT_MINT_DEBUG rejected: bad currency {currency}")
         return jsonify({"success": False, "error": "Currency must be TRX, TON or USDT"}), 400
     if not image_data or not image_data.startswith("data:image/"):
+        logger.info("NFT_MINT_DEBUG rejected: invalid image_data format")
         return jsonify({"success": False, "error": "Valid image required"}), 400
     if len(image_data) > config.NFT_MAX_IMAGE_BYTES:
-        return jsonify({"success": False, "error": "Image too large (max 2MB)"}), 400
+        logger.info(f"NFT_MINT_DEBUG rejected: image too large, len={len(image_data)} limit={config.NFT_MAX_IMAGE_BYTES}")
+        return jsonify({"success": False, "error": "Image too large (max 5MB)"}), 400
 
     user = get_user(user_id)
     if not user:
+        logger.info(f"NFT_MINT_DEBUG rejected: user not found {user_id}")
         return jsonify({"success": False, "error": "User not found"}), 404
 
     fee_result = charge_nft_mint_fee(user_id, currency)
     if not fee_result["success"]:
+        logger.info(f"NFT_MINT_DEBUG rejected: fee charge failed - {fee_result['error']}")
         return jsonify({"success": False, "error": fee_result["error"]}), 400
 
     nft = create_nft(user_id, name, image_data)
