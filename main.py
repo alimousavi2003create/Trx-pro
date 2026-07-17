@@ -781,12 +781,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id=str(user.id), username=user.username or "",
         first_name=user.first_name or "", last_name=user.last_name or "", photo_url=""
     )
+    logger.info(f"REFERRAL_DEBUG user_id={user.id} is_new_user={is_new_user} args={context.args}")
     if is_new_user and context.args:
         ref_code = context.args[0].strip()
+        logger.info(f"REFERRAL_DEBUG attempting placement, ref_code={ref_code}")
         try:
-            place_in_binary_tree(str(user.id), ref_code)
+            placed = place_in_binary_tree(str(user.id), ref_code)
+            logger.info(f"REFERRAL_DEBUG placement result={placed}")
         except Exception as e:
-            logger.error(f"referral placement failed: {e}")
+            logger.error(f"REFERRAL_DEBUG placement failed: {e}")
+    elif not is_new_user:
+        logger.info(f"REFERRAL_DEBUG skipped placement: user {user.id} already existed in database")
+    elif not context.args:
+        logger.info(f"REFERRAL_DEBUG skipped placement: no start parameter received")
     if not is_group_member(str(user.id)):
         keyboard = [
             [InlineKeyboardButton("Join Group", url=config.FORCE_JOIN_INVITE_LINK)],
