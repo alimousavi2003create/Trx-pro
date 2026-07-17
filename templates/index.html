@@ -316,12 +316,19 @@ html, body {
             <div style="font-size:12px;color:var(--neon-cyan);font-weight:700;">LEFT</div>
             <div class="leg-bar"><div class="leg-fill" id="leftFill" style="width:0%"></div></div>
             <div style="font-size:11px;color:var(--text-muted);" id="leftVol">0 TRX</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;"><span id="leftDownlineCount">0</span> نفر</div>
+            <div style="font-size:12px;color:var(--neon-cyan);font-weight:700;margin-top:2px;" id="leftCommission">0 TRX</div>
           </div>
           <div class="tree-leg leg-right">
             <div style="font-size:12px;color:var(--neon-pink);font-weight:700;">RIGHT</div>
             <div class="leg-bar"><div class="leg-fill" id="rightFill" style="width:0%"></div></div>
             <div style="font-size:11px;color:var(--text-muted);" id="rightVol">0 TRX</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;"><span id="rightDownlineCount">0</span> نفر</div>
+            <div style="font-size:12px;color:var(--neon-pink);font-weight:700;margin-top:2px;" id="rightCommission">0 TRX</div>
           </div>
+        </div>
+        <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--glass-border);font-size:12px;color:var(--text-muted);">
+          Total Downline: <span id="downlineCount" style="color:var(--text-primary);font-weight:700;">0</span>
         </div>
       </div>
       <div class="wallet-card">
@@ -340,21 +347,9 @@ html, body {
           <span style="font-size:13px;color:var(--text-muted);">Next Bonus</span>
           <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-yellow);" id="nextBonusAmount">400 TRX</span>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
+        <div style="display:flex;justify-content:space-between;padding:8px 0;">
           <span style="font-size:13px;color:var(--text-muted);">Bonus Cycles Earned</span>
           <span style="font-family:'Orbitron',sans-serif;font-size:14px;" id="cycleCount">0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
-          <span style="font-size:13px;color:var(--text-muted);">Total Downline</span>
-          <span style="font-family:'Orbitron',sans-serif;font-size:14px;" id="downlineCount">0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);">
-          <span style="font-size:13px;color:var(--text-muted);">Left Commission</span>
-          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-cyan);" id="leftCommission">0 TRX</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;">
-          <span style="font-size:13px;color:var(--text-muted);">Right Commission</span>
-          <span style="font-family:'Orbitron',sans-serif;font-size:14px;color:var(--neon-pink);" id="rightCommission">0 TRX</span>
         </div>
       </div>
     </div>
@@ -1417,6 +1412,8 @@ async function loadReferralStats() {
     const d = await r.json();
     if (!d.success) return;
     document.getElementById('downlineCount').textContent = d.downline_count;
+    document.getElementById('leftDownlineCount').textContent = d.left_downline_count;
+    document.getElementById('rightDownlineCount').textContent = d.right_downline_count;
     document.getElementById('leftCommission').textContent = d.left_commission_trx.toFixed(2) + ' TRX';
     document.getElementById('rightCommission').textContent = d.right_commission_trx.toFixed(2) + ' TRX';
   } catch (e) {}

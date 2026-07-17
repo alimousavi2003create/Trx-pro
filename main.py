@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 import config
 from database import init_db, get_db_cursor
 from auth import verify_init_data, is_group_member
-from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft, pay_direct_referral_bonus, get_downline_count
+from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, get_downline_count_by_side, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft, pay_direct_referral_bonus, get_downline_count
 from crash_engine import start_crash_engine, get_public_state, notify_group
 from deposit_monitor import start_deposit_monitor
 
@@ -667,9 +667,12 @@ def api_referral_stats():
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
     downline_count = get_downline_count(user_id)
+    left_downline_count, right_downline_count = get_downline_count_by_side(user_id)
     return jsonify({
         "success": True,
         "downline_count": downline_count,
+        "left_downline_count": left_downline_count,
+        "right_downline_count": right_downline_count,
         "left_commission_trx": float(user.get("left_commission_trx") or 0),
         "right_commission_trx": float(user.get("right_commission_trx") or 0),
     })
