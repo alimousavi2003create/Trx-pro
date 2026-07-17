@@ -523,7 +523,13 @@ def api_admin_resetpool():
 
 @app.route("/api/nft/mint", methods=["POST"])
 def api_nft_mint():
-    data = request.json
+    content_length = request.content_length
+    logger.info(f"NFT_MINT_DEBUG raw request received, content_length={content_length}")
+    data = request.get_json(silent=True)
+    if data is None:
+        raw_preview = request.get_data(as_text=True)[:200]
+        logger.info(f"NFT_MINT_DEBUG JSON PARSE FAILED, content_length={content_length}, raw_preview={raw_preview}")
+        return jsonify({"success": False, "error": "Invalid request body"}), 400
     user_id = str(data.get("user_id", ""))
     name = str(data.get("name", "")).strip()
     currency = str(data.get("currency", "")).upper()
