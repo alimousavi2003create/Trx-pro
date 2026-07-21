@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 import config
 from database import init_db, get_db_cursor
 from auth import verify_init_data, is_group_member
-from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, get_downline_count_by_side, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft, pay_direct_referral_bonus, get_downline_count
+from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, get_downline_count_by_side, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft, pay_direct_referral_bonus, get_downline_count, get_spin_status, perform_spin, grant_referral_spin, get_user_by_referral_code
 from crash_engine import start_crash_engine, get_public_state, notify_group
 from deposit_monitor import start_deposit_monitor
 
@@ -362,6 +362,26 @@ def api_crash_cashout():
     notify_group(f"\U0001F7E2 Someone won {net_payout:.2f} {bet['currency']} at {multiplier:.2f}x!")
 
     return jsonify({"success": True, "multiplier": multiplier, "payout": net_payout})
+
+@app.route("/api/spin/status")
+def api_spin_status():
+    user_id = request.args.get("user_id", "")
+    status = get_spin_status(user_id)
+    return jsonify({"success": True, **status, "segments": config.SPIN_WHEEL_SEGMENTS})
+
+
+@app.route("/api/spin", methods=["POST"])
+def api_spin():
+    data = request.json
+    user_id = str(data.get("user_id"))
+    init_data_raw = data.get("init_data", "")
+    try:
+        verify_init_data(init_data_raw)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 403
+    result = perform_spin(user_id)
+    return jsonify(result)
+
 
 @app.route("/api/deposit_info")
 def api_deposit_info():
@@ -921,6 +941,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             placed = place_in_binary_tree(str(user.id), ref_code)
             logger.info(f"REFERRAL_DEBUG placement result={placed}")
+            if placed:
+                referrer = get_user_by_referral_code(ref_code)
+                if referrer:
+                    grant_referral_spin(referrer["user_id"])
         except Exception as e:
             logger.error(f"REFERRAL_DEBUG placement failed: {e}")
     elif not is_new_user:

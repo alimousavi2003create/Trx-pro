@@ -525,3 +525,74 @@ def get_downline_count(user_id: str) -> int:
                 if node["right_child"]:
                     queue.append(node["right_child"])
     return count
+
+
+def get_spin_status(user_id: str) -> dict:
+    from datetime import datetime, timezone, timedelta
+    with get_db_cursor() as c:
+        c.execute("SELECT last_spin_at, bonus_spins FROM users WHERE user_id = %s", (user_id,))
+        row = c.fetchone()
+        if not row:
+            return {"daily_available": False, "bonus_spins": 0}
+        last_spin = row["last_spin_at"]
+        bonus_spins = row["bonus_spins"] or 0
+        daily_available = True
+        if last_spin:
+            if last_spin.tzinfo is None:
+                last_spin = last_spin.replace(tzinfo=timezone.utc)
+            daily_available = (datetime.now(timezone.utc) - last_spin) >= timedelta(hours=24)
+        return {"daily_available": daily_available, "bonus_spins": bonus_spins}
+
+
+def perform_spin(user_id: str) -> dict:
+    import random
+    status = get_spin_status(user_id)
+    use_bonus = False
+    if not status["daily_available"]:
+        if status["bonus_spins"] <= 0:
+            return {"success": False, "error": "No spins available"}
+        use_bonus = True
+
+    segments = config.SPIN_WHEEL_SEGMENTS
+    weights = [s["weight"] for s in segments]
+    chosen = random.choices(segments, weights=weights, k=1)[0]
+
+    with get_db_cursor() as c:
+        if use_bonus:
+            c.execute("UPDATE users SET bonus_spins = bonus_spins - 1 WHERE user_id = %s", (user_id,))
+        else:
+            c.execute("UPDATE users SET last_spin_at = NOW() WHERE user_id = %s", (user_id,))
+
+        result = {"success": True, "label": chosen["label"], "type": chosen["type"]}
+
+        if chosen["type"] == "prize":
+            balance_col = {"TRX": "balance_trx", "TON": "balance_ton", "USDT": "balance_usdt"}[chosen["currency"]]
+            c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
+                      (chosen["amount"], user_id))
+            c.execute("""
+                INSERT INTO transactions (user_id, type, currency, amount, metadata)
+                VALUES (%s, 'spin_prize', %s, %s, %s)
+            """, (user_id, chosen["currency"], chosen["amount"], json.dumps({"label": chosen["label"]})))
+            result["currency"] = chosen["currency"]
+            result["amount"] = chosen["amount"]
+
+        elif chosen["type"] == "free_spin":
+            c.execute("UPDATE users SET bonus_spins = bonus_spins + 1 WHERE user_id = %s", (user_id,))
+
+        elif chosen["type"] == "jackpot":
+            for cur, amt in config.SPIN_JACKPOT_PRIZES.items():
+                balance_col = {"TRX": "balance_trx", "TON": "balance_ton", "USDT": "balance_usdt"}[cur]
+                c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
+                          (amt, user_id))
+                c.execute("""
+                    INSERT INTO transactions (user_id, type, currency, amount, metadata)
+                    VALUES (%s, 'spin_jackpot', %s, %s, %s)
+                """, (user_id, cur, amt, json.dumps({"label": "JACKPOT"})))
+            result["jackpot_prizes"] = config.SPIN_JACKPOT_PRIZES
+
+    return result
+
+
+def grant_referral_spin(referrer_user_id: str):
+    with get_db_cursor() as c:
+        c.execute("UPDATE users SET bonus_spins = bonus_spins + 1 WHERE user_id = %s", (referrer_user_id,))

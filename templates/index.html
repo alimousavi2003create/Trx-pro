@@ -425,6 +425,14 @@ html, body {
     </div>
 
     <!-- TAB: Admin -->
+    <div id="tab-wheel" class="tab-content hidden">
+      <div class="wallet-card" style="text-align:center;">
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">Daily Lucky Wheel</div>
+        <div id="wheelSegmentsList" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:18px;"></div>
+        <div id="wheelStatusText" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;"></div>
+        <button class="action-btn btn-bet" id="spinWheelBtn" onclick="spinWheel()" style="width:100%;">SPIN</button>
+      </div>
+    </div>
     <div id="tab-admin" class="tab-content hidden">
       <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom:16px;">
         <div class="stat-card">
@@ -500,6 +508,10 @@ html, body {
     <div class="tab-item" onclick="switchTab('nft')">
       <span class="tab-icon">🖼️</span>
       <span>NFT</span>
+    </div>
+    <div class="tab-item" onclick="switchTab('wheel')">
+      <span class="tab-icon">🎡</span>
+      <span>Wheel</span>
     </div>
     <div class="tab-item hidden" id="adminTabBtn" onclick="switchTab('admin')">
       <span class="tab-icon">🛠️</span>
@@ -594,6 +606,7 @@ function switchTab(tab) {
   if (tab === 'admin') { loadAdminDashboard(); }
   if (tab === 'nft') { switchNftView('mint'); }
   if (tab === 'referral') { loadReferralStats(); }
+  if (tab === 'wheel') { loadWheelStatus(); }
   document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
   event.currentTarget.classList.add('active');
 }
@@ -1402,6 +1415,66 @@ async function loadReferralStats() {
 
 initAuth();
 checkAdminStatus();
+
+async function loadWheelStatus() {
+  try {
+    const r = await fetch(API_BASE + '/api/spin/status?user_id=' + encodeURIComponent(userId));
+    const d = await r.json();
+    if (!d.success) return;
+
+    document.getElementById('wheelSegmentsList').innerHTML = (d.segments || []).map(s => `
+      <div style="background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);border-radius:10px;padding:10px;font-size:11px;">
+        ${s.type === 'jackpot' ? '🎉 JACKPOT' : s.type === 'free_spin' ? '🔄 Free Spin' : s.label}
+      </div>`).join('');
+
+    const btn = document.getElementById('spinWheelBtn');
+    const statusText = document.getElementById('wheelStatusText');
+    if (d.daily_available) {
+      statusText.textContent = 'Daily free spin available!' + (d.bonus_spins > 0 ? ` (+${d.bonus_spins} bonus spins)` : '');
+      btn.disabled = false;
+      btn.textContent = 'SPIN';
+    } else if (d.bonus_spins > 0) {
+      statusText.textContent = `${d.bonus_spins} bonus spin(s) available`;
+      btn.disabled = false;
+      btn.textContent = 'SPIN';
+    } else {
+      statusText.textContent = 'Come back tomorrow for your next free spin';
+      btn.disabled = true;
+      btn.textContent = 'NO SPINS LEFT';
+    }
+  } catch (e) { console.error('wheel status error', e); }
+}
+
+async function spinWheel() {
+  const btn = document.getElementById('spinWheelBtn');
+  btn.disabled = true;
+  btn.textContent = 'SPINNING...';
+  try {
+    const r = await fetch(API_BASE + '/api/spin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, init_data: initDataRaw })
+    });
+    const d = await r.json();
+    if (d.success) {
+      if (d.type === 'jackpot') {
+        showToast('JACKPOT! You won the grand prize!', 'success');
+      } else if (d.type === 'free_spin') {
+        showToast('Free Spin won! Spin again!', 'success');
+      } else {
+        showToast(`You won ${d.amount} ${d.currency}!`, 'success');
+      }
+      try {
+        const ur = await fetch(API_BASE + '/api/user/' + userId);
+        const ud = await ur.json();
+        if (ud.success) { userData = ud.user; updateUI(); }
+      } catch (e) {}
+      loadWheelStatus();
+    } else {
+      showToast(d.error || 'No spins available', 'error');
+      loadWheelStatus();
+    }
+  } catch (e) { showToast('Network error', 'error'); loadWheelStatus(); }
+}
 </script>
 </body>
 </html>

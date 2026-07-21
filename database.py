@@ -77,6 +77,8 @@ def init_db():
         c.execute("UPDATE users SET tap_count_today = 0, tap_count_reset_at = NOW() WHERE tap_count_today >= %s", (config.TAP_DAILY_LIMIT,))
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS tap_count_reset_at TIMESTAMP DEFAULT NOW()")
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_automine_at TIMESTAMP DEFAULT NOW()")
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_spin_at TIMESTAMP")
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_spins INTEGER DEFAULT 0")
         c.execute("""
             CREATE TABLE IF NOT EXISTS shop_items (
                 id SERIAL PRIMARY KEY, item_key TEXT UNIQUE NOT NULL,

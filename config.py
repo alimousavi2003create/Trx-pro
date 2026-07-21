@@ -59,3 +59,18 @@ NFT_MARKETPLACE_BUYER_FEE_PERCENT = float(os.environ.get("NFT_MARKETPLACE_BUYER_
 NFT_MARKETPLACE_SELLER_FEE_PERCENT = float(os.environ.get("NFT_MARKETPLACE_SELLER_FEE_PERCENT", "5"))
 
 NFT_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB limit for base64 image uploads
+
+SPIN_WHEEL_SEGMENTS = [
+    {"label": "0.5 TRX", "currency": "TRX", "amount": 0.5, "weight": 25, "type": "prize"},
+    {"label": "1 TRX", "currency": "TRX", "amount": 1, "weight": 20, "type": "prize"},
+    {"label": "0.05 TON", "currency": "TON", "amount": 0.05, "weight": 15, "type": "prize"},
+    {"label": "0.05 USDT", "currency": "USDT", "amount": 0.05, "weight": 15, "type": "prize"},
+    {"label": "Free Spin", "currency": None, "amount": 0, "weight": 10, "type": "free_spin"},
+    {"label": "3 TRX", "currency": "TRX", "amount": 3, "weight": 7, "type": "prize"},
+    {"label": "0.2 TON", "currency": "TON", "amount": 0.2, "weight": 4, "type": "prize"},
+    {"label": "0.2 USDT", "currency": "USDT", "amount": 0.2, "weight": 2, "type": "prize"},
+    {"label": "10 TRX", "currency": "TRX", "amount": 10, "weight": 1.5, "type": "prize"},
+    {"label": "JACKPOT", "currency": "MULTI", "amount": 0, "weight": 0.5, "type": "jackpot"},
+]
+
+SPIN_JACKPOT_PRIZES = {"TON": 1, "USDT": 1, "TRX": 10}
