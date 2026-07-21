@@ -115,15 +115,18 @@ def _finalize_crash_point():
             if not wagered or wagered <= 0:
                 continue
             collected, paid = _get_pool_budget(currency)
+            net_reserve = max(0.0, collected - paid)
+            safety_margin = 0.5
             available_budget = max(0.0, PAYOUT_TARGET * collected - paid)
+            safe_cap_budget = net_reserve * safety_margin
 
-            if available_budget <= 0:
+            if safe_cap_budget <= 0:
                 point_for_currency = round(random.uniform(1.00, 1.15), 2)
             else:
-                release = available_budget * PACING_FRACTION
+                release = min(available_budget, safe_cap_budget) * PACING_FRACTION
                 target_mult = 1 + (release / wagered)
                 jitter = random.uniform(0.6, 1.3)
-                hard_cap = 1 + (available_budget / wagered)
+                hard_cap = 1 + (safe_cap_budget / wagered)
                 point_for_currency = round(max(1.00, min(target_mult * jitter, hard_cap)), 2)
 
             if final_point is None or point_for_currency < final_point:
