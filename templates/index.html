@@ -611,6 +611,7 @@ function switchTab(tab) {
   if (tab === 'nft') { switchNftView('mint'); }
   if (tab === 'referral') { loadReferralStats(); }
   if (tab === 'wheel') { loadWheelStatus(); }
+  if (tab === 'shop') { loadShop(); }
   document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
   event.currentTarget.classList.add('active');
 }

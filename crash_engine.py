@@ -146,6 +146,9 @@ def _finalize_crash_point():
 
 def _settle_round():
     round_id = live_state["round_id"]
+    cp = live_state["crash_point"]
+    color = "\U0001F7E2" if cp and cp >= 1.8 else "\U0001F534"
+    notify_group(f"{color} Round closed at {cp}x")
     with get_db_cursor() as c:
         c.execute("""
             SELECT currency, COUNT(*) as cnt, SUM(amount) as total
