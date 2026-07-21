@@ -7,8 +7,9 @@ import asyncio
 import threading
 import logging
 from flask import Flask, request, jsonify, render_template
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, ReactionTypeEmoji
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from crash_engine import GROUP_CHAT_ID
 
 import config
 from database import init_db, get_db_cursor
@@ -890,6 +891,17 @@ async def admin_mentionbatch(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(f"Mentioned {len(rows)} users across {sent_count} message(s).")
 
 
+async def react_to_group_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await context.bot.set_message_reaction(
+            chat_id=update.effective_chat.id,
+            message_id=update.message.message_id,
+            reaction=[ReactionTypeEmoji("\u2764")]
+        )
+    except Exception as e:
+        logger.error(f"group message reaction failed: {e}")
+
+
 async def admin_resetpool(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -1011,6 +1023,7 @@ async def run_bot():
     app_bot.add_handler(CommandHandler("forgetuser", admin_forgetuser))
     app_bot.add_handler(CallbackQueryHandler(check_join_callback, pattern="^check_join$"))
     app_bot.add_handler(CommandHandler("mentionbatch", admin_mentionbatch))
+    app_bot.add_handler(MessageHandler(filters.Chat(chat_id=int(GROUP_CHAT_ID)) & filters.ALL, react_to_group_messages))
     await app_bot.initialize()
     await app_bot.start()
     await app_bot.updater.start_polling()
