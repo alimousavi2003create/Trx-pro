@@ -427,8 +427,12 @@ html, body {
     <!-- TAB: Admin -->
     <div id="tab-wheel" class="tab-content hidden">
       <div class="wallet-card" style="text-align:center;">
-        <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">Daily Lucky Wheel</div>
-        <div id="wheelSegmentsList" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:18px;"></div>
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:18px;text-transform:uppercase;letter-spacing:1px;">Daily Lucky Wheel</div>
+        <div style="position:relative;width:260px;height:260px;margin:0 auto 20px;">
+          <div style="position:absolute;top:-16px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:22px solid #3df2d4;z-index:5;filter:drop-shadow(0 0 6px #3df2d4);"></div>
+          <div id="wheelCircle" style="width:100%;height:100%;border-radius:50%;position:relative;border:5px solid #222;box-shadow:0 0 30px rgba(61,242,212,0.3);transition:transform 4s cubic-bezier(0.15,0.65,0.1,1);"></div>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:50%;background:#0d0b1a;border:3px solid #3df2d4;z-index:6;"></div>
+        </div>
         <div id="wheelStatusText" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;"></div>
         <button class="action-btn btn-bet" id="spinWheelBtn" onclick="spinWheel()" style="width:100%;">SPIN</button>
       </div>
@@ -1416,16 +1420,36 @@ async function loadReferralStats() {
 initAuth();
 checkAdminStatus();
 
+let wheelSegmentsCache = [];
+let wheelRotation = 0;
+const WHEEL_COLORS = ['#3df2d4','#8b5cf6','#ff4d8d','#ffcc00','#3df2d4','#8b5cf6','#ff4d8d','#ffcc00','#00d4ff','#ff6b35'];
+
+function renderWheelCircle(segments) {
+  const n = segments.length;
+  const slice = 360 / n;
+  const stops = segments.map((s, i) => {
+    const color = WHEEL_COLORS[i % WHEEL_COLORS.length];
+    return `${color} ${i*slice}deg ${(i+1)*slice}deg`;
+  }).join(', ');
+  const wheel = document.getElementById('wheelCircle');
+  wheel.style.background = `conic-gradient(${stops})`;
+  wheel.innerHTML = segments.map((s, i) => {
+    const angle = i * slice + slice / 2;
+    const label = s.type === 'jackpot' ? '🎉' : s.type === 'free_spin' ? '🔄' : s.label.replace(' ', '\n');
+    return `<div style="position:absolute;width:100%;height:100%;top:0;left:0;transform:rotate(${angle}deg);display:flex;justify-content:center;">
+      <span style="display:inline-block;margin-top:14px;font-size:9px;font-weight:700;color:#0a0a12;transform:rotate(0deg);white-space:pre-line;text-align:center;line-height:1.1;">${label}</span>
+    </div>`;
+  }).join('');
+}
+
 async function loadWheelStatus() {
   try {
     const r = await fetch(API_BASE + '/api/spin/status?user_id=' + encodeURIComponent(userId));
     const d = await r.json();
     if (!d.success) return;
 
-    document.getElementById('wheelSegmentsList').innerHTML = (d.segments || []).map(s => `
-      <div style="background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);border-radius:10px;padding:10px;font-size:11px;">
-        ${s.type === 'jackpot' ? '🎉 JACKPOT' : s.type === 'free_spin' ? '🔄 Free Spin' : s.label}
-      </div>`).join('');
+    wheelSegmentsCache = d.segments || [];
+    renderWheelCircle(wheelSegmentsCache);
 
     const btn = document.getElementById('spinWheelBtn');
     const statusText = document.getElementById('wheelStatusText');
@@ -1445,6 +1469,12 @@ async function loadWheelStatus() {
   } catch (e) { console.error('wheel status error', e); }
 }
 
+function findSegmentIndex(result) {
+  if (result.type === 'jackpot') return wheelSegmentsCache.findIndex(s => s.type === 'jackpot');
+  if (result.type === 'free_spin') return wheelSegmentsCache.findIndex(s => s.type === 'free_spin');
+  return wheelSegmentsCache.findIndex(s => s.type === 'prize' && s.currency === result.currency && s.amount === result.amount);
+}
+
 async function spinWheel() {
   const btn = document.getElementById('spinWheelBtn');
   btn.disabled = true;
@@ -1456,19 +1486,32 @@ async function spinWheel() {
     });
     const d = await r.json();
     if (d.success) {
-      if (d.type === 'jackpot') {
-        showToast('JACKPOT! You won the grand prize!', 'success');
-      } else if (d.type === 'free_spin') {
-        showToast('Free Spin won! Spin again!', 'success');
-      } else {
-        showToast(`You won ${d.amount} ${d.currency}!`, 'success');
-      }
-      try {
-        const ur = await fetch(API_BASE + '/api/user/' + userId);
-        const ud = await ur.json();
-        if (ud.success) { userData = ud.user; updateUI(); }
-      } catch (e) {}
-      loadWheelStatus();
+      const idx = findSegmentIndex(d);
+      const n = wheelSegmentsCache.length || 10;
+      const slice = 360 / n;
+      const targetCenter = idx >= 0 ? (idx * slice + slice / 2) : 0;
+      const extraSpins = 5 * 360;
+      const currentMod = wheelRotation % 360;
+      const delta = (360 - targetCenter) - currentMod;
+      const normalizedDelta = ((delta % 360) + 360) % 360;
+      wheelRotation += extraSpins + normalizedDelta;
+      document.getElementById('wheelCircle').style.transform = `rotate(${wheelRotation}deg)`;
+
+      setTimeout(async () => {
+        if (d.type === 'jackpot') {
+          showToast('JACKPOT! You won the grand prize!', 'success');
+        } else if (d.type === 'free_spin') {
+          showToast('Free Spin won! Spin again!', 'success');
+        } else {
+          showToast(`You won ${d.amount} ${d.currency}!`, 'success');
+        }
+        try {
+          const ur = await fetch(API_BASE + '/api/user/' + userId);
+          const ud = await ur.json();
+          if (ud.success) { userData = ud.user; updateUI(); }
+        } catch (e) {}
+        loadWheelStatus();
+      }, 4100);
     } else {
       showToast(d.error || 'No spins available', 'error');
       loadWheelStatus();
