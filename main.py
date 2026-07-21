@@ -413,8 +413,10 @@ def api_withdraw():
         return jsonify({"success": False, "error": "Invalid amount"}), 400
     if amount <= 0 or not destination:
         return jsonify({"success": False, "error": "Invalid request"}), 400
-    if currency == "TRX" and amount < config.MIN_WITHDRAWAL_TRX:
-        return jsonify({"success": False, "error": f"Minimum withdrawal is {config.MIN_WITHDRAWAL_TRX} TRX"}), 400
+    min_withdrawals = {"TRX": config.MIN_WITHDRAWAL_TRX, "TON": config.MIN_WITHDRAWAL_TON, "USDT": config.MIN_WITHDRAWAL_USDT}
+    min_required = min_withdrawals.get(currency)
+    if min_required and amount < min_required:
+        return jsonify({"success": False, "error": f"Minimum withdrawal is {min_required} {currency}"}), 400
 
     user = get_user(user_id)
     if not user:
