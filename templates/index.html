@@ -258,7 +258,7 @@ html, body {
     <div id="tab-crash" class="tab-content hidden">
       <div class="crash-stage">
         <canvas id="crashCanvas" class="crash-canvas"></canvas>
-        <div id="flightEmoji" style="position:absolute;left:50%;bottom:5%;transform:translateX(-50%);font-size:32px;transition:bottom 0.3s linear;z-index:5;">\U0001F969</div>
+        <div id="flightEmoji" style="position:absolute;left:50%;bottom:5%;transform:translateX(-50%);font-size:32px;transition:bottom 0.3s linear;z-index:5;">🚀</div>
         <div class="crash-history" id="crashHistory">
           <div class="history-chip history-win">1.42x</div>
           <div class="history-chip history-loss">1.05x</div>
@@ -851,7 +851,7 @@ async function pollCrashState() {
       multNum.textContent = '1.00x';
       multLabel.textContent = `STARTING IN ${left}s`;
       const flightElW = document.getElementById('flightEmoji');
-      if (flightElW) { flightElW.textContent = '\U0001F969'; flightElW.style.bottom = '5%'; }
+      if (flightElW) { flightElW.textContent = '\u{1F680}'; flightElW.style.bottom = '5%'; }
       btn.textContent = userHasBet ? 'BET PLACED' : 'PLACE BET';
       btn.disabled = userHasBet;
       btn.classList.toggle('btn-bet', true);
@@ -878,7 +878,7 @@ async function pollCrashState() {
       multNum.textContent = d.crash_point.toFixed(2) + 'x';
       multLabel.textContent = 'CRASHED';
       const flightElC = document.getElementById('flightEmoji');
-      if (flightElC) { flightElC.textContent = '\U0001F346'; }
+      if (flightElC) { flightElC.textContent = '\u{1F4A5}'; }
       if (queuedBet) {
         btn.textContent = `CANCEL QUEUED (${queuedBet.amount} ${queuedBet.currency})`;
         btn.disabled = false;
