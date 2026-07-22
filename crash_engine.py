@@ -32,11 +32,16 @@ PAYOUT_TARGET = 0.80
 GROUP_CHAT_ID = "-1003811791270"
 
 
-def notify_group(text, sticker_id=None):
+def notify_group(text, sticker_id=None, reply_markup=None, parse_mode=None):
     try:
+        payload = {"chat_id": GROUP_CHAT_ID, "text": text}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
         requests.post(
             f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
-            json={"chat_id": GROUP_CHAT_ID, "text": text},
+            json=payload,
             timeout=5,
         )
     except Exception as e:
@@ -274,7 +279,16 @@ def _settle_round():
     cp = live_state["crash_point"]
     if cp and cp > 10:
         emoji = random.choice(CELEBRATION_EMOJIS)
-        notify_group(f"{emoji} {cp}x!")
+        celebration_text = (
+            f"{emoji} <b>{cp}x!</b>\n"
+            f"Someone just hit a huge multiplier in TRX PRO Crash!"
+        )
+        keyboard = {
+            "inline_keyboard": [[
+                {"text": "\U0001F680 Play Now", "url": "https://t.me/Minerbyner_bot?start=celebration"}
+            ]]
+        }
+        notify_group(celebration_text, reply_markup=keyboard, parse_mode="HTML")
     with get_db_cursor() as c:
         c.execute("""
             SELECT currency, COUNT(*) as cnt, SUM(amount) as total
