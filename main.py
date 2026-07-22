@@ -396,6 +396,47 @@ def api_deposit_info():
     })
 
 
+@app.route("/api/deposit/claim", methods=["POST"])
+def api_deposit_claim():
+    data = request.json
+    user_id = str(data.get("user_id"))
+    init_data_raw = data.get("init_data", "")
+    currency = str(data.get("currency", "")).upper()
+    amount = data.get("amount")
+    try:
+        verify_init_data(init_data_raw)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 403
+    if currency not in ("TRX", "TON", "USDT"):
+        return jsonify({"success": False, "error": "Invalid currency"}), 400
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid amount"}), 400
+    if amount <= 0:
+        return jsonify({"success": False, "error": "Invalid amount"}), 400
+
+    with get_db_cursor() as c:
+        c.execute("""
+            INSERT INTO deposit_claims (user_id, currency, amount, status)
+            VALUES (%s, %s, %s, 'pending') RETURNING id
+        """, (user_id, currency, amount))
+        claim_id = c.fetchone()["id"]
+
+    for admin_id in config.ADMIN_TELEGRAM_IDS:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
+                json={"chat_id": admin_id,
+                      "text": f"New deposit claim #{claim_id}\nUser: {user_id}\nAmount: {amount} {currency}\n\nUse /approvedeposit {claim_id} after confirming on your wallet."},
+                timeout=5,
+            )
+        except Exception as e:
+            logger.error(f"deposit claim admin notify failed: {e}")
+
+    return jsonify({"success": True, "message": "Deposit claim submitted for admin review", "claim_id": claim_id})
+
+
 @app.route("/api/withdraw", methods=["POST"])
 def api_withdraw():
     data = request.json
@@ -910,6 +951,66 @@ async def admin_resetpool(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Pool reset to zero for all currencies.")
 
 
+async def admin_deposits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    with get_db_cursor() as c:
+        c.execute("SELECT * FROM deposit_claims WHERE status = 'pending' ORDER BY created_at ASC LIMIT 20")
+        rows = c.fetchall()
+    if not rows:
+        await update.message.reply_text("No pending deposit claims.")
+        return
+    lines = ["Pending deposit claims:\n"]
+    for r in rows:
+        lines.append(f"#{r['id']} | user {r['user_id']} | {r['amount']} {r['currency']}")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def admin_approvedeposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /approvedeposit <id>")
+        return
+    claim_id = context.args[0]
+    with get_db_cursor() as c:
+        c.execute("SELECT * FROM deposit_claims WHERE id = %s AND status = 'pending'", (claim_id,))
+        claim = c.fetchone()
+        if not claim:
+            await update.message.reply_text("Claim not found or already processed.")
+            return
+        balance_col = get_balance_col(claim["currency"])
+        c.execute(f"UPDATE users SET {balance_col} = {balance_col} + %s WHERE user_id = %s",
+                   (claim["amount"], claim["user_id"]))
+        c.execute("UPDATE deposit_claims SET status = 'approved', processed_at = NOW() WHERE id = %s", (claim_id,))
+        c.execute("""
+            INSERT INTO transactions (user_id, type, currency, amount, metadata)
+            VALUES (%s, 'deposit', %s, %s, %s)
+        """, (claim["user_id"], claim["currency"], claim["amount"], json.dumps({"claim_id": claim_id})))
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
+            json={"chat_id": claim["user_id"],
+                  "text": f"Your deposit of {claim['amount']} {claim['currency']} has been confirmed and credited to your balance!"},
+            timeout=5,
+        )
+    except Exception as e:
+        logger.error(f"deposit approval user notify failed: {e}")
+    await update.message.reply_text(f"Deposit claim #{claim_id} approved and credited.")
+
+
+async def admin_rejectdeposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /rejectdeposit <id>")
+        return
+    claim_id = context.args[0]
+    with get_db_cursor() as c:
+        c.execute("UPDATE deposit_claims SET status = 'rejected', processed_at = NOW() WHERE id = %s AND status = 'pending'", (claim_id,))
+    await update.message.reply_text(f"Deposit claim #{claim_id} rejected.")
+
+
 async def admin_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -1020,6 +1121,9 @@ async def run_bot():
     app_bot.add_handler(CommandHandler("reject", admin_reject))
     app_bot.add_handler(CommandHandler("credit", admin_credit))
     app_bot.add_handler(CommandHandler("resetpool", admin_resetpool))
+    app_bot.add_handler(CommandHandler("deposits", admin_deposits))
+    app_bot.add_handler(CommandHandler("approvedeposit", admin_approvedeposit))
+    app_bot.add_handler(CommandHandler("rejectdeposit", admin_rejectdeposit))
     app_bot.add_handler(CommandHandler("forgetuser", admin_forgetuser))
     app_bot.add_handler(CallbackQueryHandler(check_join_callback, pattern="^check_join$"))
     app_bot.add_handler(CommandHandler("mentionbatch", admin_mentionbatch))

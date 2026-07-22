@@ -78,6 +78,14 @@ def init_db():
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS tap_count_reset_at TIMESTAMP DEFAULT NOW()")
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_automine_at TIMESTAMP DEFAULT NOW()")
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_spin_at TIMESTAMP")
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS deposit_claims (
+                id SERIAL PRIMARY KEY, user_id TEXT NOT NULL,
+                currency TEXT NOT NULL, amount REAL NOT NULL,
+                status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW(),
+                processed_at TIMESTAMP
+            )
+        """)
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_spins INTEGER DEFAULT 0")
         c.execute("""
             CREATE TABLE IF NOT EXISTS shop_items (
