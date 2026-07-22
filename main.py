@@ -5,6 +5,7 @@ import uuid
 import json
 import asyncio
 import threading
+import random
 import logging
 from flask import Flask, request, jsonify, render_template
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, ReactionTypeEmoji
@@ -932,12 +933,22 @@ async def admin_mentionbatch(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(f"Mentioned {len(rows)} users across {sent_count} message(s).")
 
 
+RANDOM_REACTIONS = [
+    "\U0001F44D", "\u2764", "\U0001F525", "\U0001F970", "\U0001F44F",
+    "\U0001F389", "\u2B50", "\U0001F60D", "\U0001F929", "\U0001F680",
+    "\U0001F4AF", "\u26A1", "\U0001F947", "\U0001F4B0", "\U0001F947",
+]
+
+
 async def react_to_group_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
     try:
+        emoji = random.choice(RANDOM_REACTIONS)
         await context.bot.set_message_reaction(
             chat_id=update.effective_chat.id,
             message_id=update.message.message_id,
-            reaction=[ReactionTypeEmoji("\u2764")]
+            reaction=[ReactionTypeEmoji(emoji)]
         )
     except Exception as e:
         logger.error(f"group message reaction failed: {e}")
