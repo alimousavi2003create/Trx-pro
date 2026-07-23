@@ -481,6 +481,17 @@ def api_withdraw():
             VALUES (%s, 'withdrawal_request', %s, %s, %s)
         """, (user_id, currency, -amount, json.dumps({"withdrawal_id": wid, "destination": destination})))
 
+    for admin_id in config.ADMIN_TELEGRAM_IDS:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
+                json={"chat_id": admin_id,
+                      "text": f"New withdrawal request #{wid}\nUser: {user_id}\nAmount: {amount} {currency}\nDestination: {destination}\n\nUse /approve {wid} after sending, or /reject {wid} to refund."},
+                timeout=5,
+            )
+        except Exception as e:
+            logger.error(f"withdrawal admin notify failed: {e}")
+
     return jsonify({"success": True, "message": "Withdrawal request submitted", "withdrawal_id": wid})
 
 
@@ -810,6 +821,17 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
             INSERT INTO transactions (user_id, type, currency, amount, metadata)
             VALUES (%s, 'withdrawal_paid', %s, %s, %s)
         """, (req["user_id"], req["currency"], -req["amount"], json.dumps({"withdrawal_id": wid})))
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
+            json={"chat_id": req["user_id"],
+                  "text": f"Your withdrawal of {req['amount']} {req['currency']} has been paid!"},
+            timeout=5,
+        )
+    except Exception as e:
+        logger.error(f"withdrawal paid user notify failed: {e}")
+    from crash_engine import notify_group
+    notify_group(f"\U0001F4B8 Someone withdrew {req['amount']} {req['currency']}")
     await update.message.reply_text(f"Withdrawal #{wid} marked as paid.")
 
 
