@@ -18,6 +18,7 @@ from auth import verify_init_data, is_group_member
 from models import get_or_create_user, get_user, update_balance, get_inventory, get_transactions, place_in_binary_tree, distribute_referral, get_downline_count_by_side, create_nft, get_nft, get_user_nfts, get_marketplace_listings, set_nft_listing, transfer_nft, charge_nft_mint_fee, delete_nft, pay_direct_referral_bonus, get_downline_count, get_spin_status, perform_spin, grant_referral_spin, get_user_by_referral_code
 from crash_engine import start_crash_engine, get_public_state, notify_group
 from deposit_monitor import start_deposit_monitor
+from reaction_bots import start_reaction_bots_thread
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1182,6 +1183,7 @@ if __name__ == "__main__":
     init_db()
     start_crash_engine()
     start_deposit_monitor()
+    start_reaction_bots_thread()
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     asyncio.run(run_bot())
