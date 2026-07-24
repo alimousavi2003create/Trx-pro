@@ -28,13 +28,14 @@ def get_reaction_bot_tokens():
 
 
 async def make_reaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
+    msg = update.effective_message
+    if not msg:
         return
     try:
         emoji = random.choice(REACTION_EMOJIS)
         await context.bot.set_message_reaction(
-            chat_id=update.effective_chat.id,
-            message_id=update.message.message_id,
+            chat_id=msg.chat_id,
+            message_id=msg.message_id,
             reaction=[ReactionTypeEmoji(emoji)]
         )
     except TelegramError as e:
@@ -47,7 +48,7 @@ async def run_single_reaction_bot(token):
     await app.initialize()
     await app.bot.delete_webhook(drop_pending_updates=True)
     await app.start()
-    await app.updater.start_polling(drop_pending_updates=True)
+    await app.updater.start_polling(drop_pending_updates=True, allowed_updates=["message", "channel_post"])
     logger.info(f"Reaction bot started: ...{token[-6:]}")
     return app
 
